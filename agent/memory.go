@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/RussellLuo/timingwheel"
@@ -17,10 +18,11 @@ type memoryElement struct {
 
 // MemoryAgent sessionid agent store on memory
 type MemoryAgent struct {
-	opts   options
-	token  map[string]memoryElement
-	wheel  *timingwheel.TimingWheel
-	locker sync.Mutex
+	opts  options
+	token map[string]memoryElement
+	wheel *timingwheel.TimingWheel
+	done  uint32
+	m     sync.Mutex
 }
 
 func NewMemoryAgent(opt ...Option) *MemoryAgent {
@@ -40,8 +42,8 @@ func NewMemoryAgent(opt ...Option) *MemoryAgent {
 
 // Create a token for id.
 // userdata is the custom data associated with the token.
-// maxage is the token expiration time in seconds .
-func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, maxage int32) (token string, e error) {
+// expiry is the token expiry  duration.
+func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, expiry time.Duration) (token string, e error) {
 	sessionid, e := a.opts.sessionid()
 	if e != nil {
 		return
@@ -55,15 +57,17 @@ func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, maxage in
 		SessionID: sessionid,
 		Data:      userdata,
 	}
-	a.locker.Lock()
-	defer a.locker.Unlock()
-	a.token[id] = ele
-	ele.Timer = a.wheel.AfterFunc(time.Second*time.Duration(maxage), func() {
-		a.locker.Lock()
-		defer a.locker.Unlock()
-		if current, exists := a.token[id]; exists && current.SessionID == ele.SessionID {
-			delete(a.token, id)
-		}
+	e = a.doSlow(func() error {
+		a.token[id] = ele
+		ele.Timer = a.wheel.AfterFunc(expiry, func() {
+			a.doSlow(func() error {
+				if current, exists := a.token[id]; exists && current.SessionID == ele.SessionID {
+					delete(a.token, id)
+				}
+				return nil
+			})
+		})
+		return nil
 	})
 	return
 }
@@ -74,58 +78,93 @@ func (a *MemoryAgent) Remove(ctx context.Context, token string) (exists bool, e 
 	if e != nil {
 		return
 	}
-	a.locker.Lock()
-	defer a.locker.Unlock()
-	if t, ok := a.token[id]; ok && t.SessionID == sessionid {
-		t.Timer.Stop()
-		exists = true
-		delete(a.token, id)
-	}
+	e = a.doSlow(func() error {
+		if t, ok := a.token[id]; ok && t.SessionID == sessionid {
+			t.Timer.Stop()
+			exists = true
+			delete(a.token, id)
+		}
+		return nil
+	})
 	return
 }
 
 // RemoveByID remove token by id
 func (a *MemoryAgent) RemoveByID(ctx context.Context, id string) (exists bool, e error) {
-	a.locker.Lock()
-	defer a.locker.Unlock()
-	if t, ok := a.token[id]; ok {
-		t.Timer.Stop()
-		exists = true
-		delete(a.token, id)
-	}
+	e = a.doSlow(func() error {
+		if t, ok := a.token[id]; ok {
+			t.Timer.Stop()
+			exists = true
+			delete(a.token, id)
+		}
+		return nil
+	})
 	return
 }
 
 // Get the userdata associated with the token
 //
-// if maxage > 0 then reset the expiration time
+// if expiry > 0 then reset the expiration time
 //
-// if maxage < 0 then expire immediately after returning
-func (a *MemoryAgent) Get(ctx context.Context, token string, maxage int32) (id, userdata string, exists bool, e error) {
+// if expiry < 0 then expire immediately after returning
+func (a *MemoryAgent) Get(ctx context.Context, token string, expiry time.Duration) (id, userdata string, exists bool, e error) {
 	id, sessionid, e := cryptoer.Decode(a.opts.signingMethod, a.opts.signingKey, token)
 	if e != nil {
 		return
 	}
-	a.locker.Lock()
-	defer a.locker.Unlock()
+	var (
+		t  memoryElement
+		ok bool
+	)
+	e = a.doSlow(func() error {
+		t, ok = a.token[id]
+		return nil
+	})
 
-	if t, ok := a.token[id]; ok && t.SessionID == sessionid {
-		if maxage != 0 {
+	if ok && t.SessionID == sessionid {
+		if expiry != 0 {
 			t.Timer.Stop()
 		}
 		exists = true
 		userdata = t.Data
-		if maxage < 0 {
+		if expiry < 0 {
 			delete(a.token, id)
-		} else if maxage > 0 {
-			t.Timer = a.wheel.AfterFunc(time.Second*time.Duration(maxage), func() {
-				a.locker.Lock()
-				defer a.locker.Unlock()
-				if current, exists := a.token[id]; exists && current.SessionID == sessionid {
-					delete(a.token, id)
-				}
+		} else if expiry > 0 {
+			t.Timer = a.wheel.AfterFunc(expiry, func() {
+				e = a.doSlow(func() error {
+					if current, exists := a.token[id]; exists && current.SessionID == sessionid {
+						delete(a.token, id)
+					}
+					return nil
+				})
 			})
 		}
+	}
+	return
+}
+func (a *MemoryAgent) doSlow(f func() error) error {
+	if atomic.LoadUint32(&a.done) == 0 {
+		a.m.Lock()
+		defer a.m.Unlock()
+		if a.done == 0 {
+			return f()
+		}
+	}
+	return ErrAgentClosed
+}
+func (a *MemoryAgent) Close() (e error) {
+	closed := true
+	if atomic.LoadUint32(&a.done) == 0 {
+		a.m.Lock()
+		defer a.m.Unlock()
+		if a.done == 0 {
+			defer atomic.StoreUint32(&a.done, 1)
+			a.wheel.Stop()
+			closed = false
+		}
+	}
+	if closed {
+		e = ErrAgentClosed
 	}
 	return
 }

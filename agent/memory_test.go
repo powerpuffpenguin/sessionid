@@ -20,6 +20,7 @@ func TestMemory(t *testing.T) {
 	method := cryptoer.GetSigningMethod(`HMD5`)
 	assert.NotNil(t, method)
 	a := agent.NewMemoryAgent(
+		agent.WithWheel(time.Millisecond*50, 20),
 		agent.WithSigningMethod(method),
 		agent.WithSigningKey([]byte(`cerberus is an idea`)),
 	)
@@ -34,7 +35,7 @@ func TestMemory(t *testing.T) {
 
 	ctx := context.Background()
 	for key, ele := range keys {
-		token, e := a.Create(ctx, key, ele.data, 1)
+		token, e := a.Create(ctx, key, ele.data, time.Millisecond*200)
 		assert.Nil(t, e)
 		ele.token = token
 	}
@@ -45,7 +46,7 @@ func TestMemory(t *testing.T) {
 		assert.Equal(t, key, id)
 		assert.Equal(t, ele.data, userdata)
 	}
-	time.Sleep(time.Second)
+	time.Sleep(time.Millisecond * 500)
 	for _, ele := range keys {
 		_, _, exists, e := a.Get(ctx, ele.token, 0)
 		assert.Nil(t, e)
