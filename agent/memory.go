@@ -112,24 +112,22 @@ func (a *MemoryAgent) Get(ctx context.Context, token string, expiry time.Duratio
 	if e != nil {
 		return
 	}
-	var (
-		t  memoryElement
-		ok bool
-	)
-	e = a.doSlow(func() error {
-		t, ok = a.token[id]
+	a.doSlow(func() error {
+		userdata, exists, e = a.get(id, sessionid, expiry)
 		return nil
 	})
-
+	return
+}
+func (a *MemoryAgent) get(id, sessionid string, expiry time.Duration) (userdata string, exists bool, e error) {
+	t, ok := a.token[id]
 	if ok && t.SessionID == sessionid {
-		if expiry != 0 {
-			t.Timer.Stop()
-		}
 		exists = true
 		userdata = t.Data
 		if expiry < 0 {
+			t.Timer.Stop()
 			delete(a.token, id)
 		} else if expiry > 0 {
+			t.Timer.Stop()
 			t.Timer = a.wheel.AfterFunc(expiry, func() {
 				e = a.doSlow(func() error {
 					if current, exists := a.token[id]; exists && current.SessionID == sessionid {
@@ -152,19 +150,15 @@ func (a *MemoryAgent) doSlow(f func() error) error {
 	}
 	return ErrAgentClosed
 }
-func (a *MemoryAgent) Close() (e error) {
-	closed := true
+func (a *MemoryAgent) Close() error {
 	if atomic.LoadUint32(&a.done) == 0 {
 		a.m.Lock()
 		defer a.m.Unlock()
 		if a.done == 0 {
 			defer atomic.StoreUint32(&a.done, 1)
 			a.wheel.Stop()
-			closed = false
+			return nil
 		}
 	}
-	if closed {
-		e = ErrAgentClosed
-	}
-	return
+	return ErrAgentClosed
 }
