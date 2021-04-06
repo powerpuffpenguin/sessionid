@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package sessionid.agent;
+option go_package = "github.com/powerpuffpenguin/sessionid/protocol/agent";
+
+service Service {
+    rpc Create (CreateRequest) returns (CreateResponse);
+    rpc Remove (RemoveRequest) returns (RemoveResponse);
+    rpc RemoveByID (RemoveByIDRequest) returns (RemoveByIDResponse);
+    rpc Get (GetRequest) returns (GetResponse);
+    rpc SetExpiry (SetExpiryRequest) returns (SetExpiryResponse);
+}
+
+message CreateRequest{
+    string id = 1;
+    string data = 2;
+    uint32 maxage = 3;
+}
+message CreateResponse{
+    string token = 1;
+}
+message RemoveRequest{
+    string token = 1;
+}
+message RemoveResponse{
+    bool exists =1;
+}
+message RemoveByIDRequest{
+    string id = 1;
+}
+message RemoveByIDResponse{
+    bool exists =1;
+}
+message GetRequest{
+    string token = 1;
+}
+message GetResponse{
+    string data = 1;
+}
+message SetExpiryRequest{
+    string token = 1;
+    uint32 maxage = 2;
+}
+message SetExpiryResponse{
+    bool exists =1;
+}

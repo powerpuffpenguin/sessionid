@@ -42,8 +42,8 @@ func NewMemoryAgent(opt ...Option) *MemoryAgent {
 
 // Create a token for id.
 // userdata is the custom data associated with the token.
-// expiry is the token expiry  duration.
-func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, expiry time.Duration) (token string, e error) {
+// expiration is the token expiration time.
+func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, expiration time.Duration) (token string, e error) {
 	sessionid, e := a.opts.sessionid()
 	if e != nil {
 		return
@@ -59,7 +59,7 @@ func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, expiry ti
 	}
 	e = a.doSlow(func() error {
 		a.token[id] = ele
-		ele.Timer = a.wheel.AfterFunc(expiry, func() {
+		ele.Timer = a.wheel.AfterFunc(expiration, func() {
 			a.doSlow(func() error {
 				if current, exists := a.token[id]; exists && current.SessionID == ele.SessionID {
 					delete(a.token, id)
@@ -103,32 +103,38 @@ func (a *MemoryAgent) RemoveByID(ctx context.Context, id string) (exists bool, e
 }
 
 // Get the userdata associated with the token
-//
-// if expiry > 0 then reset the expiration time
-//
-// if expiry < 0 then expire immediately after returning
-func (a *MemoryAgent) Get(ctx context.Context, token string, expiry time.Duration) (id, userdata string, exists bool, e error) {
+func (a *MemoryAgent) Get(ctx context.Context, token string) (id, userdata string, exists bool, e error) {
 	id, sessionid, e := cryptoer.Decode(a.opts.signingMethod, a.opts.signingKey, token)
 	if e != nil {
 		return
 	}
 	a.doSlow(func() error {
-		userdata, exists, e = a.get(id, sessionid, expiry)
+		current, ok := a.token[id]
+		if ok && current.SessionID == sessionid {
+			exists = true
+			userdata = current.Data
+		}
 		return nil
 	})
 	return
 }
-func (a *MemoryAgent) get(id, sessionid string, expiry time.Duration) (userdata string, exists bool, e error) {
+
+// SetExpiry set the token expiration time.
+func (a *MemoryAgent) SetExpiry(ctx context.Context, token string, expiration time.Duration) (exists bool, e error) {
+	id, sessionid, e := cryptoer.Decode(a.opts.signingMethod, a.opts.signingKey, token)
+	if e != nil {
+		return
+	}
 	t, ok := a.token[id]
 	if ok && t.SessionID == sessionid {
 		exists = true
-		userdata = t.Data
-		if expiry < 0 {
+
+		if expiration <= 0 {
 			t.Timer.Stop()
 			delete(a.token, id)
-		} else if expiry > 0 {
+		} else {
 			t.Timer.Stop()
-			t.Timer = a.wheel.AfterFunc(expiry, func() {
+			t.Timer = a.wheel.AfterFunc(expiration, func() {
 				e = a.doSlow(func() error {
 					if current, exists := a.token[id]; exists && current.SessionID == sessionid {
 						delete(a.token, id)
@@ -140,6 +146,7 @@ func (a *MemoryAgent) get(id, sessionid string, expiry time.Duration) (userdata 
 	}
 	return
 }
+
 func (a *MemoryAgent) doSlow(f func() error) error {
 	if atomic.LoadUint32(&a.done) == 0 {
 		a.m.Lock()

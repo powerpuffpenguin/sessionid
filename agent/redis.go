@@ -70,11 +70,7 @@ func (a *RedisAgent) RemoveByID(ctx context.Context, id string) (exists bool, e 
 }
 
 // Get the userdata associated with the token
-//
-// if expiry > 0 then reset the expiration time
-//
-// if expiry < 0 then expire immediately after returning
-func (a *RedisAgent) Get(ctx context.Context, token string, expiry time.Duration) (id, userdata string, exists bool, e error) {
+func (a *RedisAgent) Get(ctx context.Context, token string) (id, userdata string, exists bool, e error) {
 	id, _, e = cryptoer.Decode(a.opts.signingMethod, a.opts.signingKey, token)
 	if e != nil {
 		return
@@ -88,13 +84,25 @@ func (a *RedisAgent) Get(ctx context.Context, token string, expiry time.Duration
 		return
 	}
 	exists = true
-	if expiry < 0 {
+
+	return
+}
+
+// SetExpiry set the token expiration time.
+func (a *RedisAgent) SetExpiry(ctx context.Context, token string, expiration time.Duration) (exists bool, e error) {
+	if expiration <= 0 {
 		e = a.client.Del(ctx, token).Err()
-	} else if expiry > 0 {
-		e = a.client.Set(ctx, token, userdata, expiry).Err()
+	} else {
+		e = a.client.Expire(ctx, token, expiration).Err()
+	}
+	if e == nil {
+		exists = true
+	} else if e == redis.Nil {
+		e = nil
 	}
 	return
 }
+
 func (a *RedisAgent) Close() error {
 	if atomic.LoadUint32(&a.done) == 0 {
 		a.m.Lock()

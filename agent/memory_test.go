@@ -40,7 +40,7 @@ func TestMemory(t *testing.T) {
 		ele.token = token
 	}
 	for key, ele := range keys {
-		id, userdata, exists, e := a.Get(ctx, ele.token, 0)
+		id, userdata, exists, e := a.Get(ctx, ele.token)
 		assert.Nil(t, e)
 		assert.True(t, exists)
 		assert.Equal(t, key, id)
@@ -48,7 +48,7 @@ func TestMemory(t *testing.T) {
 	}
 	time.Sleep(time.Millisecond * 500)
 	for _, ele := range keys {
-		_, _, exists, e := a.Get(ctx, ele.token, 0)
+		_, _, exists, e := a.Get(ctx, ele.token)
 		assert.Nil(t, e)
 		assert.False(t, exists)
 	}
