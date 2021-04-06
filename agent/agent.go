@@ -18,5 +18,5 @@ type Agent interface {
 	// if maxage > 0 then reset the expiration time
 	//
 	// if maxage < 0 then expire immediately after returning
-	Get(ctx context.Context, token string, maxage int32) (userdata string, exists bool, e error)
+	Get(ctx context.Context, token string, maxage int32) (id, userdata string, exists bool, e error)
 }

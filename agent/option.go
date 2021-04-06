@@ -7,15 +7,19 @@ import (
 )
 
 var defaultOptions = options{
-	cryptoer:  nil,
-	wheelTick: time.Second,
-	wheelSize: 60 * 10,
+	signingMethod: cryptoer.SigningMethodHS256,
+	signingKey:    []byte(`github.com/powerpuffpenguin/sessionid`),
+	sessionid:     cryptoer.SessionID,
+	wheelTick:     time.Second,
+	wheelSize:     60 * 10,
 }
 
 type options struct {
-	cryptoer  cryptoer.Cryptoer
-	wheelTick time.Duration
-	wheelSize int64
+	signingMethod cryptoer.SigningMethod
+	signingKey    []byte
+	sessionid     func() (string, error)
+	wheelTick     time.Duration
+	wheelSize     int64
 }
 type Option interface {
 	apply(*options)
@@ -32,9 +36,19 @@ func newFuncOption(f func(*options)) *funcOption {
 		f: f,
 	}
 }
-func WithCryptoer(cryptoer cryptoer.Cryptoer) Option {
+func WithSigningMethod(method cryptoer.SigningMethod) Option {
 	return newFuncOption(func(o *options) {
-		o.cryptoer = cryptoer
+		o.signingMethod = method
+	})
+}
+func WithSigningKey(key []byte) Option {
+	return newFuncOption(func(o *options) {
+		o.signingKey = key
+	})
+}
+func WithSessionID(sessionid func() (string, error)) Option {
+	return newFuncOption(func(o *options) {
+		o.sessionid = sessionid
 	})
 }
 func WithWheel(tick time.Duration, wheelSize int64) Option {

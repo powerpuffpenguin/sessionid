@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/RussellLuo/timingwheel"
+	"github.com/powerpuffpenguin/sessionid/cryptoer"
 )
 
 type memoryElement struct {
@@ -22,7 +23,7 @@ type MemoryAgent struct {
 	locker sync.Mutex
 }
 
-func NewMemory(opt ...Option) *MemoryAgent {
+func NewMemoryAgent(opt ...Option) *MemoryAgent {
 	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
@@ -36,12 +37,16 @@ func NewMemory(opt ...Option) *MemoryAgent {
 		wheel: wheel,
 	}
 }
+
+// Create a token for id.
+// userdata is the custom data associated with the token.
+// maxage is the token expiration time in seconds .
 func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, maxage int32) (token string, e error) {
-	sessionid, e := a.opts.cryptoer.SessionID()
+	sessionid, e := a.opts.sessionid()
 	if e != nil {
 		return
 	}
-	token, e = a.opts.cryptoer.Encode(id, sessionid)
+	token, e = cryptoer.Encode(a.opts.signingMethod, a.opts.signingKey, id, sessionid)
 	if e != nil {
 		return
 	}
@@ -63,8 +68,9 @@ func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, maxage in
 	return
 }
 
+// Remove a exists token
 func (a *MemoryAgent) Remove(ctx context.Context, token string) (exists bool, e error) {
-	id, sessionid, e := a.opts.cryptoer.Decode(token)
+	id, sessionid, e := cryptoer.Decode(a.opts.signingMethod, a.opts.signingKey, token)
 	if e != nil {
 		return
 	}
@@ -77,6 +83,8 @@ func (a *MemoryAgent) Remove(ctx context.Context, token string) (exists bool, e 
 	}
 	return
 }
+
+// RemoveByID remove token by id
 func (a *MemoryAgent) RemoveByID(ctx context.Context, id string) (exists bool, e error) {
 	a.locker.Lock()
 	defer a.locker.Unlock()
@@ -87,8 +95,14 @@ func (a *MemoryAgent) RemoveByID(ctx context.Context, id string) (exists bool, e
 	}
 	return
 }
-func (a *MemoryAgent) Get(ctx context.Context, token string, maxage int32) (userdata string, exists bool, e error) {
-	id, sessionid, e := a.opts.cryptoer.Decode(token)
+
+// Get the userdata associated with the token
+//
+// if maxage > 0 then reset the expiration time
+//
+// if maxage < 0 then expire immediately after returning
+func (a *MemoryAgent) Get(ctx context.Context, token string, maxage int32) (id, userdata string, exists bool, e error) {
+	id, sessionid, e := cryptoer.Decode(a.opts.signingMethod, a.opts.signingKey, token)
 	if e != nil {
 		return
 	}
