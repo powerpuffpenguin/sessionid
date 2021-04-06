@@ -1,7 +1,7 @@
 syntax = "proto3";
 
-package sessionid.agent;
-option go_package = "github.com/powerpuffpenguin/sessionid/protocol/agent";
+package server.sessionid;
+option go_package = "server/protocol/sessionid";
 
 service Service {
     rpc Create (CreateRequest) returns (CreateResponse);
