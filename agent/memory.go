@@ -58,7 +58,7 @@ func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, expiratio
 		Data:      userdata,
 	}
 	e = a.doSlow(func() error {
-		a.token[id] = ele
+
 		ele.Timer = a.wheel.AfterFunc(expiration, func() {
 			a.doSlow(func() error {
 				if current, exists := a.token[id]; exists && current.SessionID == ele.SessionID {
@@ -67,6 +67,7 @@ func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, expiratio
 				return nil
 			})
 		})
+		a.token[id] = ele
 		return nil
 	})
 	return
@@ -125,25 +126,29 @@ func (a *MemoryAgent) SetExpiry(ctx context.Context, token string, expiration ti
 	if e != nil {
 		return
 	}
-	t, ok := a.token[id]
-	if ok && t.SessionID == sessionid {
-		exists = true
+	a.doSlow(func() error {
+		t, ok := a.token[id]
+		if ok && t.SessionID == sessionid {
+			exists = true
 
-		if expiration <= 0 {
-			t.Timer.Stop()
-			delete(a.token, id)
-		} else {
-			t.Timer.Stop()
-			t.Timer = a.wheel.AfterFunc(expiration, func() {
-				e = a.doSlow(func() error {
-					if current, exists := a.token[id]; exists && current.SessionID == sessionid {
-						delete(a.token, id)
-					}
-					return nil
+			if expiration <= 0 {
+				t.Timer.Stop()
+				delete(a.token, id)
+			} else {
+				t.Timer.Stop()
+				t.Timer = a.wheel.AfterFunc(expiration, func() {
+					e = a.doSlow(func() error {
+						if current, exists := a.token[id]; exists && current.SessionID == sessionid {
+							delete(a.token, id)
+						}
+						return nil
+					})
 				})
-			})
+				a.token[id] = t
+			}
 		}
-	}
+		return nil
+	})
 	return
 }
 
