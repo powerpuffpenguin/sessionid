@@ -12,11 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type redisElement struct {
-	data  string
-	token string
-}
-
 func TestRedis(t *testing.T) {
 	if true {
 		return
@@ -55,7 +50,7 @@ func TestRedis(t *testing.T) {
 		assert.Equal(t, key, id)
 		assert.Equal(t, ele.data, userdata)
 	}
-	duration := time.Now().Sub(last)
+	duration := time.Since(last)
 	if duration < expiry {
 		time.Sleep(expiry - duration + time.Second)
 	}

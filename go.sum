@@ -1,5 +1,7 @@
 github.com/RussellLuo/timingwheel v0.0.0-20201029015908-64de9d088c74 h1:kAsSVLB5MpjNyLoQ96YBqPaTHc870iNa99HQvLUQb/A=
 github.com/RussellLuo/timingwheel v0.0.0-20201029015908-64de9d088c74/go.mod h1:3VIJp8oOAlnDUnPy3kwyBGqsMiJJujqTP6ic9Jv6NbM=
+github.com/boltdb/bolt v1.3.1 h1:JQmyP4ZBrce+ZQu0dY660FMfatumYDLun9hBCUVIkF4=
+github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
 github.com/cespare/xxhash/v2 v2.1.1 h1:6MnRN8NT7+YBpUIWxHtefFZOKTAPgGjpQSxqLNn0+qY=
 github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=

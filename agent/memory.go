@@ -58,7 +58,6 @@ func (a *MemoryAgent) Create(ctx context.Context, id, userdata string, expiratio
 		Data:      userdata,
 	}
 	e = a.doSlow(func() error {
-
 		ele.Timer = a.wheel.AfterFunc(expiration, func() {
 			a.doSlow(func() error {
 				if current, exists := a.token[id]; exists && current.SessionID == ele.SessionID {
