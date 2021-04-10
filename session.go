@@ -46,7 +46,7 @@ func (s *Session) IsValid(ctx context.Context) (bool, error) {
 }
 
 // SetExpiry set the token expiration time.
-func (s *Session) SetExpiry(ctx context.Context, token string, expiration time.Duration) (exists bool, e error) {
+func (s *Session) SetExpiry(ctx context.Context, token string, expiration time.Duration) (e error) {
 	return s.provider.SetExpiry(ctx, token, expiration)
 }
 

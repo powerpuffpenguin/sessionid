@@ -5,9 +5,10 @@ import (
 )
 
 var defaultOptions = options{
-	method: cryptoer.SigningMethodHMD5,
-	key:    []byte(`github.com/powerpuffpenguin/sessionid`),
-	coder:  JSONCoder{},
+	method:   cryptoer.SigningMethodHMD5,
+	key:      []byte(`github.com/powerpuffpenguin/sessionid`),
+	provider: NewMemoryProvider(1000, 0),
+	coder:    JSONCoder{},
 }
 
 type options struct {
