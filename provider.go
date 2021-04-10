@@ -357,6 +357,9 @@ func (p *MemoryProvider) SetExpiry(ctx context.Context, token string, expiration
 	}
 	t.deadline = time.Now().Add(expiration)
 	ele.Value = t
+	if p.lru.Front() != ele {
+		p.lru.MoveToFront(ele)
+	}
 	return
 }
 func (p *MemoryProvider) unsafeGet(token string) (t tokenValue, ele *list.Element, e error) {
