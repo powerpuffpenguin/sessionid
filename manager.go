@@ -14,6 +14,24 @@ const (
 func Join(elem ...string) string {
 	return strings.Join(elem, string(Separator))
 }
+func Split(token string) (id, sessionid, signature string, e error) {
+	sep := string(Separator)
+	index := strings.LastIndex(token, sep)
+	if index == -1 {
+		e = ErrInvalidToken
+		return
+	}
+	signature = token[index+1:]
+	signingString := token[:index]
+	index = strings.Index(signingString, sep)
+	if index == -1 {
+		e = ErrInvalidToken
+		return
+	}
+	id = signingString[:index]
+	sessionid = signingString[index+1:]
+	return
+}
 
 type Manager struct {
 	opts options
@@ -60,7 +78,20 @@ func (m *Manager) Create(ctx context.Context,
 		return
 	}
 	t := Join(signingString, signature)
-	e = provider.Create(ctx, eid, sessionid, token, expiration, pair...)
+	var kv [][]byte
+	count := len(pair)
+	if count != 0 {
+		kv = make([][]byte, count)
+		var v []byte
+		for i := 0; i < count; i++ {
+			v, e = coder.Encode(pair[i])
+			if e != nil {
+				return
+			}
+			kv[i] = v
+		}
+	}
+	e = provider.Create(ctx, token, expiration, kv)
 	if e != nil {
 		return
 	}
@@ -84,27 +115,14 @@ func (m *Manager) DestroyByToken(ctx context.Context, token string) error {
 }
 
 func (m *Manager) Get(token string) (s *Session, e error) {
-	sep := string(Separator)
-	index := strings.LastIndex(token, sep)
-	if index == -1 {
-		e = ErrInvalidToken
-		return
-	}
-	signature := token[index+1:]
-	signingString := token[:index]
-	index = strings.Index(signingString, sep)
-	if index == -1 {
-		e = ErrInvalidToken
-		return
-	}
-	id := signingString[:index]
-	sessionid := signingString[index+1:]
-
-	e = m.opts.method.Verify(signingString, signature, m.opts.key)
+	id, sessionid, signature, e := Split(token)
 	if e != nil {
 		return
 	}
-
+	e = m.opts.method.Verify(token[:len(token)-len(signature)-1], signature, m.opts.key)
+	if e != nil {
+		return
+	}
 	s = newSession(id, sessionid, token, m.opts.provider, m.opts.coder)
 	return
 }

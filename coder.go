@@ -2,7 +2,6 @@ package sessionid
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
@@ -27,13 +26,7 @@ func newSessionID() (sessionid string, e error) {
 	if e != nil {
 		return
 	}
-	b := make([]byte, sessionidLen)
-	copy(b, u[:])
-	_, e = rand.Read(b[16:])
-	if e != nil {
-		return
-	}
-	sessionid = encode(b)
+	sessionid = encode(u[:])
 	return
 }
 func encode(b []byte) string {
