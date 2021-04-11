@@ -58,7 +58,7 @@ func NewManager(opt ...Option) *Manager {
 func (m *Manager) Create(ctx context.Context,
 	id interface{},
 	expiration time.Duration,
-	pair ...interface{},
+	pair ...Pair,
 ) (session *Session, token string, e error) {
 	sessionid, e := newSessionID()
 	if e != nil {
@@ -78,17 +78,20 @@ func (m *Manager) Create(ctx context.Context,
 		return
 	}
 	t := Join(signingString, signature)
-	var kv [][]byte
+	var kv []PairBytes
 	count := len(pair)
 	if count != 0 {
-		kv = make([][]byte, count)
+		kv = make([]PairBytes, count)
 		var v []byte
 		for i := 0; i < count; i++ {
-			v, e = coder.Encode(pair[i])
+			v, e = coder.Encode(pair[i].Value)
 			if e != nil {
 				return
 			}
-			kv[i] = v
+			kv[i] = PairBytes{
+				Key:   pair[i].Key,
+				Value: v,
+			}
 		}
 	}
 	e = provider.Create(ctx, token, expiration, kv)

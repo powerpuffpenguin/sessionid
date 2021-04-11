@@ -22,7 +22,7 @@ type Session struct {
 	token     string
 	provider  Provider
 	coder     Coder
-	keys      map[interface{}]value
+	keys      map[string]value
 }
 
 func newSession(id, sessionid, token string, provider Provider, coder Coder) *Session {
@@ -50,20 +50,28 @@ func (s *Session) SetExpiry(ctx context.Context, token string, expiration time.D
 	return s.provider.SetExpiry(ctx, token, expiration)
 }
 
+// GetExpiry get the token expiration time.
+func (s *Session) GetExpiry(ctx context.Context, token string) (deadline time.Time, e error) {
+	return s.provider.GetExpiry(ctx, token)
+}
+
 // Set key value for token
-func (s *Session) Set(ctx context.Context, pair ...interface{}) (e error) {
+func (s *Session) Set(ctx context.Context, pair ...Pair) (e error) {
 	count := len(pair)
 	if count == 0 {
 		return
 	}
-	kv := make([][]byte, count)
+	kv := make([]PairBytes, count)
 	var b []byte
 	for i := 0; i < count; i++ {
-		b, e = s.coder.Encode(pair[i])
+		b, e = s.coder.Encode(pair[i].Value)
 		if e != nil {
 			return
 		}
-		kv = append(kv, b)
+		kv = append(kv, PairBytes{
+			Key:   pair[i].Key,
+			Value: b,
+		})
 	}
 	e = s.provider.Set(ctx, s.token, kv)
 	if e != nil {
@@ -72,37 +80,30 @@ func (s *Session) Set(ctx context.Context, pair ...interface{}) (e error) {
 	if s.keys == nil {
 		return
 	}
-	for i := 0; i < count; i += 2 {
-		k := kv[i]
+	for i := 0; i < count; i++ {
 		val := Value{
 			Exists: true,
+			Bytes:  kv[i].Value,
 		}
-		if i+1 < count {
-			val.Bytes = kv[i+1]
-		}
-		s.keys[k] = value{
+		s.keys[kv[i].Key] = value{
 			Value: val,
 		}
 	}
 	return
 }
 
+// Keys return all token's key
+func (s *Session) Keys(ctx context.Context) (key []string, e error) {
+	return s.provider.Keys(ctx, s.token)
+}
+
 // Prepare get key's value from provider to local cache
-func (s *Session) Prepare(ctx context.Context, key ...interface{}) (e error) {
+func (s *Session) Prepare(ctx context.Context, key ...string) (e error) {
 	count := len(key)
 	if count == 0 {
 		return
 	}
-	k := make([][]byte, count)
-	var b []byte
-	for i := 0; i < count; i++ {
-		b, e = s.coder.Encode(key[i])
-		if e != nil {
-			return
-		}
-		k = append(k, b)
-	}
-	vals, e := s.provider.Get(ctx, s.token, k)
+	vals, e := s.provider.Get(ctx, s.token, key)
 	if e != nil {
 		return
 	}
@@ -111,7 +112,7 @@ func (s *Session) Prepare(ctx context.Context, key ...interface{}) (e error) {
 		return
 	}
 	if s.keys == nil {
-		s.keys = make(map[interface{}]value)
+		s.keys = make(map[string]value)
 	}
 	for i := 0; i < count; i++ {
 		s.keys[key[i]] = value{
@@ -120,14 +121,16 @@ func (s *Session) Prepare(ctx context.Context, key ...interface{}) (e error) {
 	}
 	return
 }
-func (s *Session) getKey(key interface{}) (val value, exists bool) {
+func (s *Session) getKey(key string) (val value, exists bool) {
 	if s.keys == nil {
 		return
 	}
 	val, exists = s.keys[key]
 	return
 }
-func (s *Session) Get(key interface{}, pointer interface{}) (e error) {
+
+// Get key's value
+func (s *Session) Get(key string, pointer interface{}) (e error) {
 	vo := reflect.ValueOf(pointer)
 	if vo.Kind() != reflect.Ptr {
 		e = ErrNeedsPointer
@@ -159,4 +162,9 @@ func (s *Session) Get(key interface{}, pointer interface{}) (e error) {
 		return
 	}
 	return
+}
+
+// Delete keys
+func (s *Session) Delete(ctx context.Context, token string, key ...string) (e error) {
+	return s.provider.Delete(ctx, token, key)
 }

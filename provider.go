@@ -8,12 +8,20 @@ import (
 	"time"
 )
 
+type Pair struct {
+	Key   string
+	Value interface{}
+}
+type PairBytes struct {
+	Key   string
+	Value []byte
+}
 type Provider interface {
 	// Create new session
 	Create(ctx context.Context,
 		token string, // id.sessionid.signature
 		expiration time.Duration,
-		pair [][]byte,
+		pair []PairBytes,
 	) (e error)
 	// Destroy a session by id
 	Destroy(ctx context.Context, id string) (e error)
@@ -23,12 +31,16 @@ type Provider interface {
 	IsValid(ctx context.Context, token string) (yes bool, e error)
 	// SetExpiry set the token expiration time.
 	SetExpiry(ctx context.Context, token string, expiration time.Duration) (e error)
+	// GetExpiry get the token expiration time.
+	GetExpiry(ctx context.Context, token string) (deadline time.Time, e error)
 	// Set key value for token
-	Set(ctx context.Context, token string, pair [][]byte) (e error)
+	Set(ctx context.Context, token string, pair []PairBytes) (e error)
 	// Get key's value from token
-	Get(ctx context.Context, token string, key [][]byte) (vals []Value, e error)
+	Get(ctx context.Context, token string, keys []string) (vals []Value, e error)
+	// Keys return all token's key
+	Keys(ctx context.Context, token string) (keys []string, e error)
 	// Delete keys
-	Delete(ctx context.Context, token string, key [][]byte) (e error)
+	Delete(ctx context.Context, token string, keys []string) (e error)
 	// Close provider
 	Close() (e error)
 }
@@ -51,15 +63,18 @@ func (t *tokenValue) SetCopy(k string, v []byte) {
 func (t *tokenValue) IsExpired() bool {
 	return !t.deadline.Before(time.Now())
 }
-func (t *tokenValue) CopyKey(key [][]byte) (vals []Value, expired bool) {
+func (t *tokenValue) CopyKeys(keys []string) (vals []Value, expired bool) {
 	expired = t.IsExpired()
+	if expired {
+		return
+	}
 	m := t.data
-	vals = make([]Value, len(key))
+	vals = make([]Value, len(keys))
 	if m == nil {
 		return
 	}
-	for i, k := range key {
-		v, exists := m[string(k)]
+	for i, k := range keys {
+		v, exists := m[k]
 		if !exists {
 			continue
 		}
@@ -199,7 +214,7 @@ func (p *MemoryProvider) read() (token string, closed bool) {
 func (p *MemoryProvider) Create(ctx context.Context,
 	token string,
 	expiration time.Duration,
-	pair [][]byte,
+	pair []PairBytes,
 ) (e error) {
 	id, _, _, e := Split(token)
 	if e != nil {
@@ -211,13 +226,8 @@ func (p *MemoryProvider) Create(ctx context.Context,
 		deadline: time.Now().Add(expiration),
 		data:     make(map[string][]byte),
 	}
-	for i := 0; i < len(pair); i += 2 {
-		k := string(pair[i])
-		var v []byte
-		if i+1 < len(pair) {
-			v = pair[i+1]
-		}
-		t.SetCopy(k, v)
+	for i := 0; i < len(pair); i++ {
+		t.SetCopy(pair[i].Key, pair[i].Value)
 	}
 	if expiration <= 0 {
 		return
@@ -231,11 +241,11 @@ func (p *MemoryProvider) Create(ctx context.Context,
 	}
 	p.unsafeDestroyByToken(token)
 	if p.lru.Len() >= p.maxsize {
-		token := p.unsafePop(p.lru.Back())
+		token := p.unsafePop(p.lru.Front())
 		delete(p.tokens, token)
 	}
 
-	p.tokens[token] = p.lru.PushFront(token)
+	p.tokens[token] = p.lru.PushBack(token)
 	p.ids[id] = append(p.ids[id], token)
 	return
 }
@@ -313,7 +323,9 @@ func (p *MemoryProvider) IsValid(ctx context.Context, token string) (yes bool, e
 	if exists {
 		t := ele.Value.(tokenValue)
 		expired = t.IsExpired()
-		e = ErrExpiredToken
+		if expired {
+			e = ErrExpiredToken
+		}
 	} else {
 		expired = true
 	}
@@ -357,11 +369,47 @@ func (p *MemoryProvider) SetExpiry(ctx context.Context, token string, expiration
 	}
 	t.deadline = time.Now().Add(expiration)
 	ele.Value = t
-	if p.lru.Front() != ele {
-		p.lru.MoveToFront(ele)
+	p.lru.MoveToBack(ele)
+	return
+}
+
+// GetExpiry get the token expiration time.
+func (p *MemoryProvider) GetExpiry(ctx context.Context, token string) (deadline time.Time, e error) {
+	_, _, _, e = Split(token)
+	if e != nil {
+		return
+	}
+	expired := false
+	p.m.RLock()
+	ele, exists := p.tokens[token]
+	if exists {
+		t := ele.Value.(tokenValue)
+		expired = t.IsExpired()
+		if expired {
+			e = ErrExpiredToken
+		} else {
+			deadline = t.deadline
+		}
+	} else {
+		expired = true
+	}
+	p.m.RUnlock()
+
+	if expired {
+		select {
+		case <-p.closed:
+			if e == nil {
+				e = ErrProviderClosed
+			}
+		case p.ch <- token:
+			if e == nil {
+				e = ErrExpiredToken
+			}
+		}
 	}
 	return
 }
+
 func (p *MemoryProvider) unsafeGet(token string) (t tokenValue, ele *list.Element, e error) {
 	ele, exists := p.tokens[token]
 	if !exists {
@@ -379,7 +427,7 @@ func (p *MemoryProvider) unsafeGet(token string) (t tokenValue, ele *list.Elemen
 }
 
 // Set key value for token
-func (p *MemoryProvider) Set(ctx context.Context, token string, pair [][]byte) (e error) {
+func (p *MemoryProvider) Set(ctx context.Context, token string, pair []PairBytes) (e error) {
 	_, _, _, e = Split(token)
 	if e != nil {
 		return
@@ -397,20 +445,15 @@ func (p *MemoryProvider) Set(ctx context.Context, token string, pair [][]byte) (
 	if len(pair) == 0 {
 		return
 	}
-	for i := 0; i < len(pair); i += 2 {
-		k := string(pair[i])
-		var v []byte
-		if i+1 < len(pair) {
-			v = pair[i+1]
-		}
-		t.SetCopy(k, v)
+	for i := 0; i < len(pair); i++ {
+		t.SetCopy(pair[i].Key, pair[i].Value)
 	}
 	ele.Value = t
 	return
 }
 
 // Get key's value from token
-func (p *MemoryProvider) Get(ctx context.Context, token string, key [][]byte) (vals []Value, e error) {
+func (p *MemoryProvider) Get(ctx context.Context, token string, keys []string) (vals []Value, e error) {
 	_, _, _, e = Split(token)
 	if e != nil {
 		return
@@ -420,7 +463,7 @@ func (p *MemoryProvider) Get(ctx context.Context, token string, key [][]byte) (v
 	ele, exists := p.tokens[token]
 	if exists {
 		t := ele.Value.(tokenValue)
-		vals, expired = t.CopyKey(key)
+		vals, expired = t.CopyKeys(keys)
 		if expired {
 			e = ErrExpiredToken
 		}
@@ -444,8 +487,48 @@ func (p *MemoryProvider) Get(ctx context.Context, token string, key [][]byte) (v
 	return
 }
 
+// Keys return all token's key
+func (p *MemoryProvider) Keys(ctx context.Context, token string) (keys []string, e error) {
+	_, _, _, e = Split(token)
+	if e != nil {
+		return
+	}
+	expired := false
+	p.m.RLock()
+	ele, exists := p.tokens[token]
+	if exists {
+		t := ele.Value.(tokenValue)
+		expired = t.IsExpired()
+		if expired {
+			e = ErrExpiredToken
+		} else if len(t.data) != 0 {
+			keys = make([]string, len(t.data))
+			for k := range t.data {
+				keys = append(keys, k)
+			}
+		}
+	} else {
+		expired = true
+	}
+	p.m.RUnlock()
+
+	if expired {
+		select {
+		case <-p.closed:
+			if e == nil {
+				e = ErrProviderClosed
+			}
+		case p.ch <- token:
+			if e == nil {
+				e = ErrExpiredToken
+			}
+		}
+	}
+	return
+}
+
 // Delete keys
-func (p *MemoryProvider) Delete(ctx context.Context, token string, key [][]byte) (e error) {
+func (p *MemoryProvider) Delete(ctx context.Context, token string, keys []string) (e error) {
 	_, _, _, e = Split(token)
 	if e != nil {
 		return
@@ -460,11 +543,11 @@ func (p *MemoryProvider) Delete(ctx context.Context, token string, key [][]byte)
 	if e != nil {
 		return
 	}
-	if len(key) == 0 {
+	if len(keys) == 0 {
 		return
 	}
-	for i := 0; i < len(key); i += 2 {
-		delete(t.data, string(key[i]))
+	for i := 0; i < len(keys); i++ {
+		delete(t.data, keys[i])
 	}
 	ele.Value = t
 	return
