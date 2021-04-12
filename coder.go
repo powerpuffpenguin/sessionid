@@ -29,6 +29,7 @@ func newSessionID() (sessionid string, e error) {
 	sessionid = encode(u[:])
 	return
 }
+
 func encode(b []byte) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }

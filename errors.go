@@ -5,8 +5,10 @@ import (
 )
 
 var (
-	ErrInvalidToken           = errors.New(`invalid token`)
-	ErrExpiredToken           = errors.New(`expired token`)
+	ErrTokenInvalid           = errors.New(`token invalid`)
+	ErrTokenExpired           = errors.New(`token expired `)   // http code 401
+	ErrTokenNotExists         = errors.New(`token not exists`) // http code  401
+	ErrRefreshTokenNotMatched = errors.New(`refresh token not matched`)
 	ErrProviderReturnNotMatch = errors.New(`provider return not matched`)
 	ErrProviderClosed         = errors.New(`provider already closed`)
 	ErrNeedsPointer           = errors.New(`needs a pointer to a value`)
@@ -14,6 +16,6 @@ var (
 	ErrKeyNotExists           = errors.New(`key not exists`)
 )
 
-func IsExpiredToken(e error) bool {
-	return errors.Is(e, ErrExpiredToken)
+func IsTokenExpired(e error) bool {
+	return errors.Is(e, ErrTokenInvalid)
 }

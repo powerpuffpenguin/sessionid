@@ -3,7 +3,6 @@ package sessionid
 import (
 	"context"
 	"strings"
-	"time"
 )
 
 const (
@@ -14,18 +13,27 @@ const (
 func Join(elem ...string) string {
 	return strings.Join(elem, string(Separator))
 }
+func IsToken(token ...string) (e error) {
+	for _, str := range token {
+		_, _, _, e = Split(str)
+		if e != nil {
+			break
+		}
+	}
+	return
+}
 func Split(token string) (id, sessionid, signature string, e error) {
 	sep := string(Separator)
 	index := strings.LastIndex(token, sep)
 	if index == -1 {
-		e = ErrInvalidToken
+		e = ErrTokenInvalid
 		return
 	}
 	signature = token[index+1:]
 	signingString := token[:index]
 	index = strings.Index(signingString, sep)
 	if index == -1 {
-		e = ErrInvalidToken
+		e = ErrTokenInvalid
 		return
 	}
 	id = signingString[:index]
@@ -52,32 +60,19 @@ func NewManager(opt ...Option) *Manager {
 //
 // * id uid or web-uid or mobile-uid or ...
 //
-// * expiration how long does the session expire
-//
 // * pair session init key value
 func (m *Manager) Create(ctx context.Context,
-	id interface{},
-	expiration time.Duration,
+	id string,
 	pair ...Pair,
-) (session *Session, token string, e error) {
-	sessionid, e := newSessionID()
+) (session *Session, refresh string, e error) {
+	eid := encode([]byte(id))
+	access, refresh, e := m.create(eid)
 	if e != nil {
 		return
 	}
 	opts := m.opts
 	provider := opts.provider
 	coder := opts.coder
-	b, e := coder.Encode(id)
-	if e != nil {
-		return
-	}
-	eid := encode(b)
-	signingString := Join(eid, sessionid)
-	signature, e := opts.method.Sign(signingString, opts.key)
-	if e != nil {
-		return
-	}
-	t := Join(signingString, signature)
 	var kv []PairBytes
 	count := len(pair)
 	if count != 0 {
@@ -94,12 +89,35 @@ func (m *Manager) Create(ctx context.Context,
 			}
 		}
 	}
-	e = provider.Create(ctx, token, expiration, kv)
+	e = provider.Create(ctx, access, refresh, kv)
 	if e != nil {
 		return
 	}
-	session = newSession(eid, sessionid, t, provider, coder)
-	token = t
+	session = newSession(eid, access, provider, coder)
+	return
+}
+func (m *Manager) create(id string) (access, refresh string, e error) {
+	access, e = m.createToken(id)
+	if e != nil {
+		return
+	}
+	refresh, e = m.createToken(id)
+	if e != nil {
+		return
+	}
+	return
+}
+func (m *Manager) createToken(id string) (token string, e error) {
+	sessionid, e := newSessionID()
+	if e != nil {
+		return
+	}
+	signingString := Join(id, sessionid)
+	signature, e := m.opts.method.Sign(signingString, m.opts.key)
+	if e != nil {
+		return
+	}
+	token = Join(signingString, signature)
 	return
 }
 
@@ -118,7 +136,7 @@ func (m *Manager) DestroyByToken(ctx context.Context, token string) error {
 }
 
 func (m *Manager) Get(token string) (s *Session, e error) {
-	id, sessionid, signature, e := Split(token)
+	id, _, signature, e := Split(token)
 	if e != nil {
 		return
 	}
@@ -126,6 +144,6 @@ func (m *Manager) Get(token string) (s *Session, e error) {
 	if e != nil {
 		return
 	}
-	s = newSession(id, sessionid, token, m.opts.provider, m.opts.coder)
+	s = newSession(id, token, m.opts.provider, m.opts.coder)
 	return
 }

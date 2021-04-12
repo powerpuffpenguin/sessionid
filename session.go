@@ -3,7 +3,6 @@ package sessionid
 import (
 	"context"
 	"reflect"
-	"time"
 )
 
 type Value struct {
@@ -17,21 +16,19 @@ type value struct {
 }
 
 type Session struct {
-	id        string
-	sessionid string
-	token     string
-	provider  Provider
-	coder     Coder
-	keys      map[string]value
+	id       string
+	token    string
+	provider Provider
+	coder    Coder
+	keys     map[string]value
 }
 
-func newSession(id, sessionid, token string, provider Provider, coder Coder) *Session {
+func newSession(id, token string, provider Provider, coder Coder) *Session {
 	return &Session{
-		id:        id,
-		sessionid: sessionid,
-		token:     token,
-		provider:  provider,
-		coder:     coder,
+		id:       id,
+		token:    token,
+		provider: provider,
+		coder:    coder,
 	}
 }
 
@@ -40,19 +37,9 @@ func (s *Session) Destroy(ctx context.Context) error {
 	return s.provider.DestroyByToken(ctx, s.token)
 }
 
-// IsValid return true if session not expired
-func (s *Session) IsValid(ctx context.Context) (bool, error) {
-	return s.provider.IsValid(ctx, s.token)
-}
-
-// SetExpiry set the token expiration time.
-func (s *Session) SetExpiry(ctx context.Context, token string, expiration time.Duration) (e error) {
-	return s.provider.SetExpiry(ctx, token, expiration)
-}
-
-// GetExpiry get the token expiration time.
-func (s *Session) GetExpiry(ctx context.Context, token string) (deadline time.Time, e error) {
-	return s.provider.GetExpiry(ctx, token)
+// Check token status
+func (s *Session) Check(ctx context.Context) error {
+	return s.provider.Check(ctx, s.token)
 }
 
 // Set key value for token
