@@ -5,9 +5,9 @@ import (
 )
 
 var (
+	ErrTokenExpired           = errors.New(`token expired `) // http code 401
 	ErrTokenInvalid           = errors.New(`token invalid`)
-	ErrTokenExpired           = errors.New(`token expired `)   // http code 401
-	ErrTokenNotExists         = errors.New(`token not exists`) // http code  401
+	ErrTokenNotExists         = errors.New(`token not exists`)
 	ErrRefreshTokenNotMatched = errors.New(`refresh token not matched`)
 	ErrProviderReturnNotMatch = errors.New(`provider return not matched`)
 	ErrProviderClosed         = errors.New(`provider already closed`)

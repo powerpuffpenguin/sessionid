@@ -38,9 +38,6 @@ func newFuncProviderOption(f func(*providerOptions)) *funcProviderOption {
 // WithProviderAccess set the valid time of access token, at least one second.
 func WithProviderAccess(duration time.Duration) ProviderOption {
 	return newFuncProviderOption(func(po *providerOptions) {
-		if duration < time.Second {
-			return
-		}
 		po.access = duration
 		if po.refresh < duration {
 			po.refresh = duration
@@ -51,9 +48,6 @@ func WithProviderAccess(duration time.Duration) ProviderOption {
 // WithProviderRefresh set the valid time of refresh token, at least one second.
 func WithProviderRefresh(duration time.Duration) ProviderOption {
 	return newFuncProviderOption(func(po *providerOptions) {
-		if duration < time.Second {
-			return
-		}
 		po.refresh = duration
 		if po.access > duration {
 			po.access = duration

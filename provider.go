@@ -72,10 +72,10 @@ func (t *tokenValue) SetCopy(k string, v []byte) {
 	}
 }
 func (t *tokenValue) IsExpired() bool {
-	return !t.accessDeadline.Before(time.Now())
+	return !t.accessDeadline.After(time.Now())
 }
 func (t *tokenValue) IsDeleted() bool {
-	return !t.refreshDeadline.Before(time.Now())
+	return !t.refreshDeadline.After(time.Now())
 }
 func (t *tokenValue) CopyKeys(keys []string) (vals []Value) {
 	m := t.data
@@ -291,7 +291,7 @@ func (p *MemoryProvider) Create(ctx context.Context,
 
 	p.m.Lock()
 	defer p.m.Unlock()
-	if p.done == 0 {
+	if p.done != 0 {
 		e = ErrProviderClosed
 		return
 	}
@@ -376,6 +376,11 @@ func (p *MemoryProvider) Check(ctx context.Context, token string) (e error) {
 	}
 	deleted := false
 	p.m.RLock()
+	if p.done != 0 {
+		p.m.RUnlock()
+		e = ErrProviderClosed
+		return
+	}
 	ele, exists := p.tokens[token]
 	if exists {
 		t := ele.Value.(*tokenValue)
@@ -451,6 +456,11 @@ func (p *MemoryProvider) Get(ctx context.Context, token string, keys []string) (
 	}
 	deleted := false
 	p.m.RLock()
+	if p.done != 0 {
+		p.m.RUnlock()
+		e = ErrProviderClosed
+		return
+	}
 	ele, exists := p.tokens[token]
 	if exists {
 		t := ele.Value.(*tokenValue)
@@ -484,6 +494,11 @@ func (p *MemoryProvider) Keys(ctx context.Context, token string) (keys []string,
 	}
 	deleted := false
 	p.m.RLock()
+	if p.done != 0 {
+		p.m.RUnlock()
+		e = ErrProviderClosed
+		return
+	}
 	ele, exists := p.tokens[token]
 	if exists {
 		t := ele.Value.(*tokenValue)
