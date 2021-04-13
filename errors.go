@@ -8,6 +8,7 @@ var (
 	ErrTokenExpired           = errors.New(`token expired `) // http code 401
 	ErrTokenInvalid           = errors.New(`token invalid`)
 	ErrTokenNotExists         = errors.New(`token not exists`)
+	ErrTokenIDNotMatched      = errors.New(`token id not matched`)
 	ErrRefreshTokenNotMatched = errors.New(`refresh token not matched`)
 	ErrProviderReturnNotMatch = errors.New(`provider return not matched`)
 	ErrProviderClosed         = errors.New(`provider already closed`)

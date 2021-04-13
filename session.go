@@ -42,8 +42,8 @@ func (s *Session) Check(ctx context.Context) error {
 	return s.provider.Check(ctx, s.token)
 }
 
-// Set key value for token
-func (s *Session) Set(ctx context.Context, pair ...Pair) (e error) {
+// Put key value for token
+func (s *Session) Put(ctx context.Context, pair ...Pair) (e error) {
 	count := len(pair)
 	if count == 0 {
 		return
@@ -60,7 +60,7 @@ func (s *Session) Set(ctx context.Context, pair ...Pair) (e error) {
 			Value: b,
 		})
 	}
-	e = s.provider.Set(ctx, s.token, kv)
+	e = s.provider.Put(ctx, s.token, kv)
 	if e != nil {
 		return
 	}

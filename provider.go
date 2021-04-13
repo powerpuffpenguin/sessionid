@@ -28,8 +28,8 @@ type Provider interface {
 	DestroyByToken(ctx context.Context, token string) (e error)
 	// Check token status
 	Check(ctx context.Context, token string) (e error)
-	// Set key value for token
-	Set(ctx context.Context, token string, pair []PairBytes) (e error)
+	// Put key value for token
+	Put(ctx context.Context, token string, pair []PairBytes) (e error)
 	// Get key's value from token
 	Get(ctx context.Context, token string, keys []string) (vals []Value, e error)
 	// Keys return all token's key
@@ -62,12 +62,20 @@ func newTokenValue(id, access, refresh string, accessDuration, refreshDuration t
 		data:            make(map[string][]byte),
 	}
 }
+func (t *tokenValue) Refresh(access, refresh string, accessDuration, refreshDuration time.Duration) {
+	at := time.Now()
+	t.access = access
+	t.refresh = refresh
+	t.accessDeadline = at.Add(accessDuration)
+	t.refreshDeadline = at.Add(refreshDuration)
+}
 
 func (t *tokenValue) SetCopy(k string, v []byte) {
 	if v == nil {
 		t.data[k] = nil
 	} else {
 		val := make([]byte, len(v))
+		copy(val, v)
 		t.data[k] = val
 	}
 }
@@ -423,8 +431,8 @@ func (p *MemoryProvider) unsafeGet(token string) (t *tokenValue, e error) {
 	return
 }
 
-// Set key value for token
-func (p *MemoryProvider) Set(ctx context.Context, token string, pair []PairBytes) (e error) {
+// Put key value for token
+func (p *MemoryProvider) Put(ctx context.Context, token string, pair []PairBytes) (e error) {
 	_, _, _, e = Split(token)
 	if e != nil {
 		return
@@ -550,6 +558,20 @@ func (p *MemoryProvider) Delete(ctx context.Context, token string, keys []string
 	}
 	return
 }
+func (p *MemoryProvider) checkID(id string, token ...string) (e error) {
+	var s string
+	for _, str := range token {
+		s, _, _, e = Split(str)
+		if e != nil {
+			return
+		}
+		if s != id {
+			e = ErrTokenIDNotMatched
+			return
+		}
+	}
+	return
+}
 
 // Refresh a new access token
 func (p *MemoryProvider) Refresh(ctx context.Context, access, refresh, newAccess, newRefresh string) (e error) {
@@ -557,10 +579,11 @@ func (p *MemoryProvider) Refresh(ctx context.Context, access, refresh, newAccess
 	if e != nil {
 		return
 	}
-	_, _, _, e = Split(refresh)
+	e = p.checkID(id, refresh, newAccess, newRefresh)
 	if e != nil {
 		return
 	}
+
 	p.m.Lock()
 	defer p.m.Unlock()
 	if p.done != 0 {
@@ -585,7 +608,7 @@ func (p *MemoryProvider) Refresh(ctx context.Context, access, refresh, newAccess
 	p.unsafePop(ele)
 	delete(p.tokens, access)
 	// push new
-	t.refresh = newRefresh
+	t.Refresh(newAccess, newRefresh, p.opts.access, p.opts.refresh)
 	p.tokens[newAccess] = p.lru.PushBack(t)
 	p.ids[id] = append(p.ids[id], newAccess)
 	return
