@@ -23,7 +23,14 @@ type Session struct {
 	keys     map[string]value
 }
 
-func newSession(id, token string, provider Provider, coder Coder) *Session {
+func (s *Session) ID() string {
+	return s.id
+}
+func (s *Session) Token() string {
+	return s.token
+}
+
+func newSession(m *Manager, id, token string, provider Provider, coder Coder) *Session {
 	return &Session{
 		id:       id,
 		token:    token,

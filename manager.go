@@ -93,7 +93,7 @@ func (m *Manager) Create(ctx context.Context,
 	if e != nil {
 		return
 	}
-	session = newSession(eid, access, provider, coder)
+	session = newSession(m, eid, access, provider, coder)
 	return
 }
 func (m *Manager) create(id string) (access, refresh string, e error) {
@@ -135,6 +135,7 @@ func (m *Manager) DestroyByToken(ctx context.Context, token string) error {
 	return m.opts.provider.DestroyByToken(ctx, token)
 }
 
+// Get session from token
 func (m *Manager) Get(token string) (s *Session, e error) {
 	id, _, signature, e := Split(token)
 	if e != nil {
@@ -144,6 +145,37 @@ func (m *Manager) Get(token string) (s *Session, e error) {
 	if e != nil {
 		return
 	}
-	s = newSession(id, token, m.opts.provider, m.opts.coder)
+	s = newSession(m, id, token, m.opts.provider, m.opts.coder)
+	return
+}
+
+// Refresh a new access token
+func (m *Manager) Refresh(ctx context.Context, access, refresh string) (newAccess, newRefresh string, e error) {
+	id, _, signature, e := Split(access)
+	if e != nil {
+		return
+	}
+	e = m.opts.method.Verify(access[:len(access)-len(signature)-1], signature, m.opts.key)
+	if e != nil {
+		return
+	}
+	id1, _, signature, e := Split(refresh)
+	if e != nil {
+		return
+	}
+	e = m.opts.method.Verify(refresh[:len(refresh)-len(signature)-1], signature, m.opts.key)
+	if e != nil {
+		return
+	}
+	if id != id1 {
+		e = ErrTokenIDNotMatched
+		return
+	}
+
+	newAccess, newRefresh, e = m.create(id)
+	if e != nil {
+		return
+	}
+	e = m.opts.provider.Refresh(ctx, access, refresh, newAccess, newRefresh)
 	return
 }
