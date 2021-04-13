@@ -2,6 +2,7 @@ package sessionid
 
 import (
 	"context"
+	"errors"
 	"reflect"
 )
 
@@ -55,7 +56,7 @@ func (s *Session) Put(ctx context.Context, pair ...Pair) (e error) {
 	if count == 0 {
 		return
 	}
-	kv := make([]PairBytes, count)
+	kv := make([]PairBytes, 0, count)
 	var b []byte
 	for i := 0; i < count; i++ {
 		b, e = s.coder.Encode(pair[i].Value)
@@ -72,7 +73,7 @@ func (s *Session) Put(ctx context.Context, pair ...Pair) (e error) {
 		return
 	}
 	if s.keys == nil {
-		return
+		s.keys = make(map[string]value)
 	}
 	for i := 0; i < count; i++ {
 		val := Value{
@@ -96,6 +97,20 @@ func (s *Session) Prepare(ctx context.Context, key ...string) (e error) {
 	count := len(key)
 	if count == 0 {
 		return
+	}
+	if s.keys != nil {
+		dst := make([]string, 0, count)
+		for _, k := range key {
+			if _, exists := s.keys[k]; exists {
+				continue
+			}
+			dst = append(dst, k)
+		}
+		count = len(dst)
+		if count == 0 {
+			return
+		}
+		key = dst
 	}
 	vals, e := s.provider.Get(ctx, s.token, key)
 	if e != nil {
@@ -124,7 +139,7 @@ func (s *Session) getKey(key string) (val value, exists bool) {
 }
 
 // Get key's value
-func (s *Session) Get(key string, pointer interface{}) (e error) {
+func (s *Session) Get(ctx context.Context, key string, pointer interface{}) (e error) {
 	vo := reflect.ValueOf(pointer)
 	if vo.Kind() != reflect.Ptr {
 		e = ErrNeedsPointer
@@ -133,10 +148,9 @@ func (s *Session) Get(key string, pointer interface{}) (e error) {
 		e = ErrPointerToPointer
 		return
 	}
-
 	if v, ok := s.getKey(key); ok {
 		if v.Exists {
-			if v.Ready {
+			if v.Ready && vo.Elem().Kind() == v.Elem.Elem().Kind() {
 				vo.Elem().Set(v.Elem.Elem())
 			} else {
 				e = s.coder.Decode(v.Bytes, pointer)
@@ -144,7 +158,6 @@ func (s *Session) Get(key string, pointer interface{}) (e error) {
 					return
 				}
 				v.Ready = true
-				v.Bytes = nil
 				p := reflect.New(vo.Elem().Type())
 				p.Elem().Set(vo.Elem())
 				v.Elem = p
@@ -155,6 +168,35 @@ func (s *Session) Get(key string, pointer interface{}) (e error) {
 		e = ErrKeyNotExists
 		return
 	}
+	vals, e := s.provider.Get(ctx, s.token, []string{key})
+	if e != nil {
+		return
+	} else if len(vals) < 1 {
+		e = errors.New(`provider.Get result not matched`)
+		return
+	}
+	if s.keys == nil {
+		s.keys = make(map[string]value)
+	}
+	if !vals[0].Exists {
+		s.keys[key] = value{}
+		e = ErrKeyNotExists
+		return
+	}
+	// ready
+	e = s.coder.Decode(vals[0].Bytes, pointer)
+	if e != nil {
+		return
+	}
+	p := reflect.New(vo.Elem().Type())
+	p.Elem().Set(vo.Elem())
+
+	var v value
+	v.Exists = true
+	v.Bytes = vals[0].Bytes
+	v.Ready = true
+	v.Elem = p
+	s.keys[key] = v
 	return
 }
 

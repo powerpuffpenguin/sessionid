@@ -94,6 +94,10 @@ func (t *tokenValue) CopyKeys(keys []string) (vals []Value) {
 	for i, k := range keys {
 		v, exists := m[k]
 		if !exists {
+			// vals[i] = Value{
+			// 	Exists: false,
+			// 	Bytes:  nil,
+			// }
 			continue
 		}
 		if v == nil {
