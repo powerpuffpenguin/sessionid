@@ -5,19 +5,19 @@ import (
 )
 
 var defaultProviderOptions = providerOptions{
-	access:      time.Hour,
-	refresh:     time.Hour * 24,
-	maxSize:     -1,
-	checkbuffer: 128,
-	clear:       time.Minute * 10,
+	access:  time.Hour,
+	refresh: time.Hour * 24,
+	maxSize: -1,
+	batch:   128,
+	clear:   time.Minute * 10,
 }
 
 type providerOptions struct {
-	access      time.Duration
-	refresh     time.Duration
-	maxSize     int
-	checkbuffer int
-	clear       time.Duration
+	access  time.Duration
+	refresh time.Duration
+	maxSize int
+	batch   int
+	clear   time.Duration
 }
 type ProviderOption interface {
 	apply(*providerOptions)
@@ -59,6 +59,13 @@ func WithProviderRefresh(duration time.Duration) ProviderOption {
 func WithProviderMaxSize(maxSize int) ProviderOption {
 	return newFuncProviderOption(func(po *providerOptions) {
 		po.maxSize = maxSize
+	})
+}
+
+// WithProviderCheckBatch set batch check.
+func WithProviderCheckBatch(batch int) ProviderOption {
+	return newFuncProviderOption(func(po *providerOptions) {
+		po.batch = batch
 	})
 }
 

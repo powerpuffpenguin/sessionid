@@ -137,15 +137,21 @@ func NewMemoryProvider(opt ...ProviderOption) (provider *MemoryProvider) {
 	for _, o := range opt {
 		o.apply(&opts)
 	}
+	var ch chan string
+	if opts.batch > 0 {
+		ch = make(chan string, opts.batch)
+	} else {
+		ch = make(chan string)
+	}
 	provider = &MemoryProvider{
 		opts:   opts,
 		tokens: make(map[string]*list.Element),
 		ids:    make(map[string][]string),
 		lru:    list.New(),
-		ch:     make(chan string, opts.checkbuffer),
+		ch:     ch,
 		closed: make(chan struct{}),
 	}
-	go provider.check(opts.checkbuffer)
+	go provider.check(opts.batch)
 	if opts.clear > 0 {
 		ticker := time.NewTicker(opts.clear)
 		provider.ticker = ticker
@@ -197,9 +203,9 @@ func (p *MemoryProvider) doClear() {
 		}
 	}
 }
-func (p *MemoryProvider) check(checkbuffer int) {
-	if checkbuffer < 128 {
-		checkbuffer = 128
+func (p *MemoryProvider) check(batch int) {
+	if batch < 1 {
+		batch = 1
 	}
 	var (
 		m           = make(map[string]bool)
@@ -214,15 +220,14 @@ func (p *MemoryProvider) check(checkbuffer int) {
 		}
 		m[token] = true
 		// merge task
-		for {
+		for len(m) < batch {
 			token, yes, closed = p.tryRead()
 			if closed {
 				return
 			} else if yes {
 				m[token] = true
-				if len(m) >= checkbuffer {
-					break
-				}
+			} else {
+				break
 			}
 		}
 		// do task
