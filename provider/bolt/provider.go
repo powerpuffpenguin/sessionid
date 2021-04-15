@@ -3,6 +3,7 @@ package bolt
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/powerpuffpenguin/sessionid"
@@ -21,6 +22,7 @@ type Provider struct {
 	opts options
 	db   *bolt.DB
 
+	ticker *time.Ticker
 	ch     chan string
 	closed chan struct{}
 	done   uint32
@@ -28,7 +30,6 @@ type Provider struct {
 }
 
 func New(opt ...Option) (provider *Provider, e error) {
-
 	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
@@ -52,7 +53,75 @@ func New(opt ...Option) (provider *Provider, e error) {
 		db:   db,
 	}
 	go provider.check(opts.batch)
+	if opts.clear > 0 {
+		ticker := time.NewTicker(opts.clear)
+		provider.ticker = ticker
+		go provider.clear(ticker.C)
+	}
 	return
+}
+func (p *Provider) clear(ch <-chan time.Time) {
+	for {
+		select {
+		case <-p.closed:
+			return
+		case <-ch:
+			p.m.Lock()
+			p.doClear()
+			p.m.Unlock()
+		}
+	}
+}
+func (p *Provider) doClear() {
+	p.db.Update(func(t *bolt.Tx) (e error) {
+		store := t.Bucket(p.opts.bucket)
+		if store == nil {
+			return
+		}
+		bucket := store.Bucket(bucketLRU)
+		if bucket == nil {
+			return
+		}
+		var (
+			cursor = bucket.Cursor()
+			bt     *bolt.Bucket
+			md     *_Metadata
+		)
+		for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
+			bt, md, e = p.getMetadata(store, v)
+			if e != nil {
+				return
+			} else if bt == nil || md == nil {
+				e = bt.Delete(k)
+				if e != nil {
+					return
+				}
+				continue
+			} else if md.IsDeleted() {
+				e = bt.Delete(v)
+				if e != nil {
+					return
+				}
+				e = p.deleteData(store, v)
+				if e != nil {
+					return
+				}
+				e = p.deleteIDS(store, []byte(md.id), string(v))
+				if e != nil {
+					return
+				}
+				e = bucket.Delete(k)
+				if e != nil {
+					return
+				}
+				e = p.decrement(store)
+				if e != nil {
+					return
+				}
+			}
+		}
+		return
+	})
 }
 func (p *Provider) check(batch int) {
 	if batch < 1 {
@@ -170,6 +239,9 @@ func (p *Provider) Close() (e error) {
 		if p.done == 0 {
 			defer atomic.StoreUint32(&p.done, 1)
 			close(p.closed)
+			if p.ticker != nil {
+				p.ticker.Stop()
+			}
 			if p.opts.db == nil {
 				p.db.Close()
 			}
