@@ -8,14 +8,18 @@ import (
 	"github.com/powerpuffpenguin/sessionid"
 )
 
+var (
+	bucketMetadata = []byte(`metadata`)
+	bucketData     = []byte(`data`)
+	bucketIDS      = []byte(`ids`)
+	bucketLRU      = []byte(`lru`)
+	bucketCount    = []byte(`count`)
+)
+
 // Provider a provider store data on local bolt database
 type Provider struct {
 	opts options
 	db   *bolt.DB
-
-	// tokens map[string]*list.Element
-	// ids    map[string][]string
-	// lru    *list.List // token lru
 
 	ch     chan string
 	closed chan struct{}
@@ -24,6 +28,7 @@ type Provider struct {
 }
 
 func New(opt ...Option) (provider *Provider, e error) {
+
 	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
@@ -45,6 +50,114 @@ func New(opt ...Option) (provider *Provider, e error) {
 	provider = &Provider{
 		opts: opts,
 		db:   db,
+	}
+	go provider.check(opts.batch)
+	return
+}
+func (p *Provider) check(batch int) {
+	if batch < 1 {
+		batch = 1
+	}
+	var (
+		m           = make(map[string]bool)
+		closed, yes bool
+		token       string
+	)
+	for {
+		// first task
+		token, closed = p.read()
+		if closed {
+			break
+		}
+		m[token] = true
+		// merge task
+		for len(m) < batch {
+			token, yes, closed = p.tryRead()
+			if closed {
+				return
+			} else if yes {
+				m[token] = true
+			} else {
+				break
+			}
+		}
+		// do task
+		if p.doCheck(m) {
+			break
+		}
+		// clear task
+		for token = range m {
+			delete(m, token)
+		}
+	}
+}
+func (p *Provider) doCheck(m map[string]bool) (closed bool) {
+	p.m.Lock()
+	defer p.m.Unlock()
+	if p.done != 0 {
+		closed = true
+		return
+	}
+	p.db.Update(func(t *bolt.Tx) (e error) {
+		store := t.Bucket(p.opts.bucket)
+		if store == nil {
+			return
+		}
+		var (
+			bucket *bolt.Bucket
+			md     *_Metadata
+		)
+		for token := range m {
+			key := []byte(token)
+			bucket, md, e = p.getMetadata(store, key)
+			if e != nil {
+				return
+			}
+			if md == nil {
+				continue
+			}
+			if md.IsDeleted() {
+				e = bucket.Delete(key)
+				if e != nil {
+					return
+				}
+				e = p.deleteData(store, key)
+				if e != nil {
+					return
+				}
+				e = p.deleteIDS(store, []byte(md.id), token)
+				if e != nil {
+					return
+				}
+				e = p.deleteLRU(store, md.lru)
+				if e != nil {
+					return
+				}
+				e = p.decrement(store)
+				if e != nil {
+					return
+				}
+			}
+		}
+		return
+	})
+	return
+}
+func (p *Provider) tryRead() (token string, yes, closed bool) {
+	select {
+	case <-p.closed:
+		closed = true
+	case token = <-p.ch:
+		yes = true
+	default:
+	}
+	return
+}
+func (p *Provider) read() (token string, closed bool) {
+	select {
+	case <-p.closed:
+		closed = true
+	case token = <-p.ch:
 	}
 	return
 }

@@ -330,7 +330,7 @@ func (p *MemoryProvider) unsafePop(ele *list.Element) string {
 		if str != t.access {
 			continue
 		}
-		if len(strs) == 0 {
+		if len(strs) == 1 {
 			delete(p.ids, t.id)
 		} else {
 			copy(strs[i:], strs[i+1:])
