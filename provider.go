@@ -299,11 +299,11 @@ func (p *MemoryProvider) Create(ctx context.Context,
 		return
 	}
 	t := newTokenValue(id, access, refresh, p.opts.access, p.opts.refresh)
-	for i := 0; i < len(pair); i++ {
-		t.SetCopy(pair[i].Key, pair[i].Value)
-	}
 	if t.IsDeleted() {
 		return
+	}
+	for i := 0; i < len(pair); i++ {
+		t.SetCopy(pair[i].Key, pair[i].Value)
 	}
 
 	p.m.Lock()
@@ -393,22 +393,21 @@ func (p *MemoryProvider) Check(ctx context.Context, token string) (e error) {
 	}
 	deleted := false
 	p.m.RLock()
-	if p.done != 0 {
-		p.m.RUnlock()
-		e = ErrProviderClosed
-		return
-	}
-	ele, exists := p.tokens[token]
-	if exists {
-		t := ele.Value.(*tokenValue)
-		if t.IsDeleted() {
-			deleted = true
+	if p.done == 0 {
+		ele, exists := p.tokens[token]
+		if exists {
+			t := ele.Value.(*tokenValue)
+			if t.IsDeleted() {
+				deleted = true
+				e = ErrTokenNotExists
+			} else if t.IsExpired() {
+				e = ErrTokenExpired
+			}
+		} else {
 			e = ErrTokenNotExists
-		} else if t.IsExpired() {
-			e = ErrTokenExpired
 		}
 	} else {
-		e = ErrTokenNotExists
+		e = ErrProviderClosed
 	}
 	p.m.RUnlock()
 
@@ -473,24 +472,23 @@ func (p *MemoryProvider) Get(ctx context.Context, token string, keys []string) (
 	}
 	deleted := false
 	p.m.RLock()
-	if p.done != 0 {
-		p.m.RUnlock()
-		e = ErrProviderClosed
-		return
-	}
-	ele, exists := p.tokens[token]
-	if exists {
-		t := ele.Value.(*tokenValue)
-		if t.IsDeleted() {
-			e = ErrTokenNotExists
-			deleted = true
-		} else if t.IsExpired() {
-			e = ErrTokenExpired
+	if p.done == 0 {
+		ele, exists := p.tokens[token]
+		if exists {
+			t := ele.Value.(*tokenValue)
+			if t.IsDeleted() {
+				e = ErrTokenNotExists
+				deleted = true
+			} else if t.IsExpired() {
+				e = ErrTokenExpired
+			} else {
+				vals = t.CopyKeys(keys)
+			}
 		} else {
-			vals = t.CopyKeys(keys)
+			e = ErrTokenNotExists
 		}
 	} else {
-		e = ErrTokenNotExists
+		e = ErrProviderClosed
 	}
 	p.m.RUnlock()
 
@@ -511,27 +509,26 @@ func (p *MemoryProvider) Keys(ctx context.Context, token string) (keys []string,
 	}
 	deleted := false
 	p.m.RLock()
-	if p.done != 0 {
-		p.m.RUnlock()
-		e = ErrProviderClosed
-		return
-	}
-	ele, exists := p.tokens[token]
-	if exists {
-		t := ele.Value.(*tokenValue)
-		if t.IsDeleted() {
-			e = ErrTokenNotExists
-			deleted = true
-		} else if t.IsExpired() {
-			e = ErrTokenExpired
-		} else if len(t.data) != 0 {
-			keys = make([]string, len(t.data))
-			for k := range t.data {
-				keys = append(keys, k)
+	if p.done == 0 {
+		ele, exists := p.tokens[token]
+		if exists {
+			t := ele.Value.(*tokenValue)
+			if t.IsDeleted() {
+				e = ErrTokenNotExists
+				deleted = true
+			} else if t.IsExpired() {
+				e = ErrTokenExpired
+			} else if len(t.data) != 0 {
+				keys = make([]string, len(t.data))
+				for k := range t.data {
+					keys = append(keys, k)
+				}
 			}
+		} else {
+			e = ErrTokenNotExists
 		}
 	} else {
-		e = ErrTokenNotExists
+		e = ErrProviderClosed
 	}
 	p.m.RUnlock()
 	if deleted {
@@ -607,6 +604,8 @@ func (p *MemoryProvider) Refresh(ctx context.Context, access, refresh, newAccess
 	}
 	t := ele.Value.(*tokenValue)
 	if t.IsDeleted() {
+		p.unsafePop(ele)
+		delete(p.tokens, access)
 		e = ErrTokenNotExists
 		return
 	} else if t.refresh != refresh {
