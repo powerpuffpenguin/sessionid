@@ -132,7 +132,7 @@ type MemoryProvider struct {
 	m      sync.RWMutex
 }
 
-func NewMemoryProvider(opt ...ProviderOption) (provider *MemoryProvider) {
+func NewProvider(opt ...ProviderOption) (provider *MemoryProvider) {
 	opts := defaultProviderOptions
 	for _, o := range opt {
 		o.apply(&opts)

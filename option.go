@@ -7,7 +7,7 @@ import (
 var defaultOptions = options{
 	method:   cryptoer.SigningMethodHMD5,
 	key:      []byte(`github.com/powerpuffpenguin/sessionid`),
-	provider: NewMemoryProvider(),
+	provider: NewProvider(),
 	coder:    JSONCoder{},
 }
 

@@ -12,7 +12,7 @@ import (
 func TestSession(t *testing.T) {
 	m := sessionid.NewManager(
 		sessionid.WithProvider(
-			sessionid.NewMemoryProvider(),
+			sessionid.NewProvider(),
 		),
 	)
 	ctx := context.Background()

@@ -19,7 +19,7 @@ func (ts *testMemoryProvider) test() {
 }
 func (ts *testMemoryProvider) testLRU() {
 	t := ts.t
-	p := NewMemoryProvider(
+	p := NewProvider(
 		WithProviderMaxSize(3),
 	)
 
@@ -27,7 +27,7 @@ func (ts *testMemoryProvider) testLRU() {
 	ctx := context.Background()
 	var tokens []string
 	for i := 0; i < 1000; i++ {
-		access, refresh, e := m.create("1-web")
+		access, refresh, e := CreateToken(m.opts.method, m.opts.key, "1-web")
 		assert.Nil(t, e)
 		assert.Nil(t, p.Create(ctx, access, refresh, nil))
 		tokens = append(tokens, access)
@@ -43,7 +43,7 @@ func (ts *testMemoryProvider) testLRU() {
 }
 func (ts *testMemoryProvider) testClear() {
 	t := ts.t
-	p := NewMemoryProvider(
+	p := NewProvider(
 		WithProviderClear(30),
 		WithProviderAccess(time.Millisecond*10),
 		WithProviderRefresh(time.Millisecond*20),
@@ -51,7 +51,7 @@ func (ts *testMemoryProvider) testClear() {
 	assert.NotNil(t, p.ticker)
 	m := NewManager()
 
-	access, refresh, e := m.create("1-web")
+	access, refresh, e := CreateToken(m.opts.method, m.opts.key, "1-web")
 	assert.Nil(t, e)
 
 	// not exists
@@ -68,7 +68,7 @@ func (ts *testMemoryProvider) testClear() {
 	assert.Equal(t, len(p.tokens), 1)
 
 	time.Sleep(time.Millisecond * 5)
-	accessApp, refreshApp, e := m.create("1-app")
+	accessApp, refreshApp, e := CreateToken(m.opts.method, m.opts.key, "1-app")
 	assert.Nil(t, e)
 	assert.Nil(t, p.Create(ctx, accessApp, refreshApp, nil))
 
@@ -80,7 +80,7 @@ func (ts *testMemoryProvider) testClear() {
 }
 func (ts *testMemoryProvider) testNormal() {
 	t := ts.t
-	p := NewMemoryProvider(
+	p := NewProvider(
 		WithProviderClear(0),
 		WithProviderAccess(time.Millisecond*10),
 		WithProviderRefresh(time.Millisecond*20),
@@ -88,7 +88,7 @@ func (ts *testMemoryProvider) testNormal() {
 	assert.Nil(t, p.ticker)
 	m := NewManager()
 
-	access, refresh, e := m.create("1-web")
+	access, refresh, e := CreateToken(m.opts.method, m.opts.key, "1-web")
 	assert.Nil(t, e)
 
 	// not exists

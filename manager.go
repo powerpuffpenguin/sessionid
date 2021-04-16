@@ -2,56 +2,39 @@ package sessionid
 
 import (
 	"context"
-	"strings"
 )
 
-const (
-	Separator    = '.'
-	sessionidLen = 16 + 4 // uuid + 4bytes rand
-)
-
-func Join(elem ...string) string {
-	return strings.Join(elem, string(Separator))
-}
-func IsToken(token ...string) (e error) {
-	for _, str := range token {
-		_, _, _, e = Split(str)
-		if e != nil {
-			break
-		}
-	}
-	return
-}
-func Split(token string) (id, sessionid, signature string, e error) {
-	sep := string(Separator)
-	index := strings.LastIndex(token, sep)
-	if index == -1 {
-		e = ErrTokenInvalid
-		return
-	}
-	signature = token[index+1:]
-	signingString := token[:index]
-	index = strings.Index(signingString, sep)
-	if index == -1 {
-		e = ErrTokenInvalid
-		return
-	}
-	id = signingString[:index]
-	sessionid = signingString[index+1:]
-	return
+type Manager interface {
+	// Create a session for the user
+	//
+	// * id uid or web-uid or mobile-uid or ...
+	//
+	// * pair session init key value
+	Create(ctx context.Context,
+		id string,
+		pair ...Pair,
+	) (session *Session, refresh string, e error)
+	// Destroy a session by id
+	Destroy(ctx context.Context, id string) error
+	// Destroy a session by token
+	DestroyByToken(ctx context.Context, token string) error
+	// Get session from token
+	Get(token string) (s *Session, e error)
+	// Refresh a new access token
+	Refresh(ctx context.Context, access, refresh string) (newAccess, newRefresh string, e error)
 }
 
-type Manager struct {
+type LocalManager struct {
 	opts options
 }
 
-func NewManager(opt ...Option) *Manager {
+func NewManager(opt ...Option) *LocalManager {
 	opts := defaultOptions
 	for _, o := range opt {
 		o.apply(&opts)
 	}
 
-	return &Manager{
+	return &LocalManager{
 		opts: opts,
 	}
 }
@@ -61,12 +44,12 @@ func NewManager(opt ...Option) *Manager {
 // * id uid or web-uid or mobile-uid or ...
 //
 // * pair session init key value
-func (m *Manager) Create(ctx context.Context,
+func (m *LocalManager) Create(ctx context.Context,
 	id string,
 	pair ...Pair,
 ) (session *Session, refresh string, e error) {
 	eid := encode([]byte(id))
-	access, refresh, e := m.create(eid)
+	access, refresh, e := CreateToken(m.opts.method, m.opts.key, eid)
 	if e != nil {
 		return
 	}
@@ -96,43 +79,19 @@ func (m *Manager) Create(ctx context.Context,
 	session = newSession(eid, access, provider, coder)
 	return
 }
-func (m *Manager) create(id string) (access, refresh string, e error) {
-	access, e = m.createToken(id)
-	if e != nil {
-		return
-	}
-	refresh, e = m.createToken(id)
-	if e != nil {
-		return
-	}
-	return
-}
-func (m *Manager) createToken(id string) (token string, e error) {
-	sessionid, e := newSessionID()
-	if e != nil {
-		return
-	}
-	signingString := Join(id, sessionid)
-	signature, e := m.opts.method.Sign(signingString, m.opts.key)
-	if e != nil {
-		return
-	}
-	token = Join(signingString, signature)
-	return
-}
 
 // Destroy a session by id
-func (m *Manager) Destroy(ctx context.Context, id string) error {
+func (m *LocalManager) Destroy(ctx context.Context, id string) error {
 	return m.opts.provider.Destroy(ctx, encode([]byte(id)))
 }
 
 // Destroy a session by token
-func (m *Manager) DestroyByToken(ctx context.Context, token string) error {
+func (m *LocalManager) DestroyByToken(ctx context.Context, token string) error {
 	return m.opts.provider.DestroyByToken(ctx, token)
 }
 
 // Get session from token
-func (m *Manager) Get(token string) (s *Session, e error) {
+func (m *LocalManager) Get(token string) (s *Session, e error) {
 	id, _, signature, e := Split(token)
 	if e != nil {
 		return
@@ -146,7 +105,7 @@ func (m *Manager) Get(token string) (s *Session, e error) {
 }
 
 // Refresh a new access token
-func (m *Manager) Refresh(ctx context.Context, access, refresh string) (newAccess, newRefresh string, e error) {
+func (m *LocalManager) Refresh(ctx context.Context, access, refresh string) (newAccess, newRefresh string, e error) {
 	id, _, signature, e := Split(access)
 	if e != nil {
 		return
@@ -168,7 +127,7 @@ func (m *Manager) Refresh(ctx context.Context, access, refresh string) (newAcces
 		return
 	}
 
-	newAccess, newRefresh, e = m.create(id)
+	newAccess, newRefresh, e = CreateToken(m.opts.method, m.opts.key, id)
 	if e != nil {
 		return
 	}
