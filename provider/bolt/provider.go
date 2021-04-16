@@ -72,9 +72,17 @@ func New(opt ...Option) (provider *Provider, e error) {
 		return
 	}
 
+	var ch chan string
+	if opts.batch > 0 {
+		ch = make(chan string, opts.batch)
+	} else {
+		ch = make(chan string)
+	}
 	provider = &Provider{
-		opts: opts,
-		db:   db,
+		opts:   opts,
+		db:     db,
+		ch:     ch,
+		closed: make(chan struct{}),
 	}
 	go provider.check(opts.batch)
 	if opts.clear > 0 {
@@ -172,7 +180,7 @@ func (p *Provider) doClear() {
 			} else if !md.IsDeleted() {
 				break
 			}
-			e = p.delete(store, bMD, bData, bIDS, bLRU, string(v), []byte(md.id), md.lru)
+			e = p.delete(store, bMD, bData, bIDS, bLRU, string(v), []byte(md.ID), md.LRU)
 			if e != nil {
 				return
 			}
@@ -237,7 +245,7 @@ func (p *Provider) doCheck(m map[string]bool) (closed bool) {
 			} else if md == nil {
 				continue
 			} else if md.IsDeleted() {
-				e = p.delete(store, bMD, bData, bIDS, bLRU, token, []byte(md.id), md.lru)
+				e = p.delete(store, bMD, bData, bIDS, bLRU, token, []byte(md.ID), md.LRU)
 				if e != nil {
 					return
 				}
@@ -307,7 +315,7 @@ func (p *Provider) Create(ctx context.Context,
 			}
 		}
 
-		md.lru, e = p.putLRU(bLRU, key)
+		md.LRU, e = p.putLRU(bLRU, key)
 		if e != nil {
 			return
 		}
@@ -383,7 +391,7 @@ func (p *Provider) deleteTokens(store, bMD, bData, bLRU *bolt.Bucket, tokens []s
 		if e != nil {
 			return
 		}
-		e = bLRU.Delete(toBytes(md.lru))
+		e = bLRU.Delete(toBytes(md.LRU))
 		if e != nil {
 			return
 		}
@@ -402,7 +410,7 @@ func (p *Provider) destoryToken(store, bMD, bData, bIDS, bLRU *bolt.Bucket, toke
 		return
 	}
 	e = p.delete(store, bMD, bData, bIDS, bLRU,
-		token, []byte(md.id), md.lru)
+		token, []byte(md.ID), md.LRU)
 	return
 }
 func (p *Provider) unsafeDestroyByToken(store *bolt.Bucket, token string) error {
@@ -448,7 +456,7 @@ func (p *Provider) unsafePop(store, bMD, bData, bIDS, bLRU *bolt.Bucket) (e erro
 			}
 			continue
 		}
-		e = p.delete(store, bMD, bData, bIDS, nil, string(key), []byte(md.id), md.lru)
+		e = p.delete(store, bMD, bData, bIDS, nil, string(key), []byte(md.ID), md.LRU)
 		if e != nil {
 			return
 		}
@@ -536,7 +544,6 @@ func (p *Provider) Check(ctx context.Context, token string) (e error) {
 		e = sessionid.ErrProviderClosed
 	}
 	p.m.RUnlock()
-
 	if deleted {
 		select {
 		case <-p.closed:
@@ -568,7 +575,7 @@ func (p *Provider) Put(ctx context.Context, token string, pair []sessionid.PairB
 				err = sessionid.ErrTokenNotExists
 				return
 			} else if md.IsDeleted() {
-				e = p.delete(store, bMD, bData, bIDS, bLRU, token, []byte(md.id), md.lru)
+				e = p.delete(store, bMD, bData, bIDS, bLRU, token, []byte(md.ID), md.LRU)
 				if e != nil {
 					return
 				}
@@ -680,7 +687,7 @@ func (p *Provider) Delete(ctx context.Context, token string, keys []string) (err
 				err = sessionid.ErrTokenNotExists
 				return
 			} else if md.IsDeleted() {
-				e = p.delete(store, bMD, bData, bIDS, bLRU, token, []byte(md.id), md.lru)
+				e = p.delete(store, bMD, bData, bIDS, bLRU, token, []byte(md.ID), md.LRU)
 				if e != nil {
 					return
 				}
@@ -747,13 +754,13 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 				err = sessionid.ErrTokenNotExists
 				return
 			} else if md.IsDeleted() {
-				e = p.delete(store, bMD, bData, bIDS, bLRU, access, []byte(md.id), md.lru)
+				e = p.delete(store, bMD, bData, bIDS, bLRU, access, []byte(md.ID), md.LRU)
 				if e != nil {
 					return
 				}
 				err = sessionid.ErrTokenNotExists
 				return
-			} else if md.refresh != refresh {
+			} else if md.Refresh != refresh {
 				err = sessionid.ErrRefreshTokenNotMatched
 				return
 			}
@@ -761,13 +768,13 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 			if e != nil {
 				return
 			}
-			e = p.delete(store, bMD, bData, bIDS, bLRU, access, []byte(md.id), md.lru)
+			e = p.delete(store, bMD, bData, bIDS, bLRU, access, []byte(md.ID), md.LRU)
 			if e != nil {
 				return
 			}
 			// new
-			md.Refresh(newAccess, newRefresh, p.opts.access, p.opts.refresh)
-			md.lru, e = p.putLRU(bLRU, key)
+			md.DoRefresh(newAccess, newRefresh, p.opts.access, p.opts.refresh)
+			md.LRU, e = p.putLRU(bLRU, key)
 			if e != nil {
 				return
 			}
@@ -818,4 +825,64 @@ func (p *Provider) Close() (e error) {
 		}
 	}
 	return sessionid.ErrProviderClosed
+}
+func (p *Provider) debugCount() (count int, e error) {
+	e = p.db.View(func(t *bolt.Tx) (e error) {
+		store := p.store(t)
+		count = int(p.count(store))
+		return
+	})
+	return
+}
+func (p *Provider) deleteBucket(bucket *bolt.Bucket) (e error) {
+	cursor := bucket.Cursor()
+	for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
+		if v == nil {
+			e = bucket.Delete(k)
+		} else {
+			e = bucket.DeleteBucket(k)
+		}
+		if e != nil {
+			break
+		}
+	}
+	return
+}
+func (p *Provider) Clear() (e error) {
+	p.m.Lock()
+	if p.done == 0 {
+		e = p.db.Update(func(t *bolt.Tx) (e error) {
+			var (
+				store                  = p.store(t)
+				bMD, bData, bIDS, bLRU = p.buckets(store)
+			)
+			e = store.Delete(keyCount)
+			if e != nil {
+				return
+			}
+			e = p.deleteBucket(bMD)
+			if e != nil {
+				return
+			}
+			e = p.deleteBucket(bData)
+			if e != nil {
+				return
+			}
+			e = p.deleteBucket(bIDS)
+			if e != nil {
+				return
+			}
+			e = p.deleteBucket(bLRU)
+			if e != nil {
+				return
+			}
+			return
+		})
+
+	} else {
+		e = sessionid.ErrProviderClosed
+		return
+	}
+	p.m.Unlock()
+	return
 }

@@ -74,8 +74,8 @@ func WithBucket(bucket []byte) Option {
 	})
 }
 
-// WithProviderAccess set the valid time of access token, at least one second.
-func WithProviderAccess(duration time.Duration) Option {
+// WithAccess set the valid time of access token, at least one second.
+func WithAccess(duration time.Duration) Option {
 	return newFuncOption(func(po *options) {
 		po.access = duration
 		if po.refresh < duration {
@@ -84,8 +84,8 @@ func WithProviderAccess(duration time.Duration) Option {
 	})
 }
 
-// WithProviderRefresh set the valid time of refresh token, at least one second.
-func WithProviderRefresh(duration time.Duration) Option {
+// WithRefresh set the valid time of refresh token, at least one second.
+func WithRefresh(duration time.Duration) Option {
 	return newFuncOption(func(po *options) {
 		po.refresh = duration
 		if po.access > duration {
@@ -94,22 +94,22 @@ func WithProviderRefresh(duration time.Duration) Option {
 	})
 }
 
-// WithProviderMaxSize maximum number of tokens saved, if <= 0 not limit
-func WithProviderMaxSize(maxSize int) Option {
+// WithMaxSize maximum number of tokens saved, if <= 0 not limit
+func WithMaxSize(maxSize int) Option {
 	return newFuncOption(func(po *options) {
 		po.maxSize = maxSize
 	})
 }
 
-// WithProviderCheckBatch set batch check.
-func WithProviderCheckBatch(batch int) Option {
+// WithCheckBatch set batch check.
+func WithCheckBatch(batch int) Option {
 	return newFuncOption(func(po *options) {
 		po.batch = batch
 	})
 }
 
-// WithProviderClear timer clear invalid token, if <=0 not start timer
-func WithProviderClear(duration time.Duration) Option {
+// WithClear timer clear invalid token, if <=0 not start timer
+func WithClear(duration time.Duration) Option {
 	return newFuncOption(func(po *options) {
 		po.clear = duration
 	})

@@ -17,13 +17,6 @@ var poolbuffer = sync.Pool{
 	},
 }
 
-func getBuffer() *bytes.Buffer {
-	return poolbuffer.Get().(*bytes.Buffer)
-}
-func putBuffer(buf *bytes.Buffer) {
-	buf.Reset()
-	poolbuffer.Put(buf)
-}
 func toBytes(v uint64) []byte {
 	b := make([]byte, 8)
 	binary.BigEndian.PutUint64(b, v)
@@ -34,37 +27,37 @@ func toUint64(b []byte) uint64 {
 }
 
 type _Metadata struct {
-	id              string
-	access          string
-	refresh         string
-	accessDeadline  time.Time
-	refreshDeadline time.Time
+	ID              string
+	Access          string
+	Refresh         string
+	AccessDeadline  time.Time
+	RefreshDeadline time.Time
 
-	lru uint64
+	LRU uint64
 }
 
 func newMetadata(id, access, refresh string, accessDuration, refreshDuration time.Duration) *_Metadata {
 	at := time.Now()
 	return &_Metadata{
-		id:              id,
-		access:          access,
-		refresh:         refresh,
-		accessDeadline:  at.Add(accessDuration),
-		refreshDeadline: at.Add(refreshDuration),
+		ID:              id,
+		Access:          access,
+		Refresh:         refresh,
+		AccessDeadline:  at.Add(accessDuration),
+		RefreshDeadline: at.Add(refreshDuration),
 	}
 }
 func (md *_Metadata) IsExpired() bool {
-	return !md.accessDeadline.After(time.Now())
+	return !md.AccessDeadline.After(time.Now())
 }
 func (md *_Metadata) IsDeleted() bool {
-	return !md.refreshDeadline.After(time.Now())
+	return !md.RefreshDeadline.After(time.Now())
 }
-func (md *_Metadata) Refresh(access, refresh string, accessDuration, refreshDuration time.Duration) {
+func (md *_Metadata) DoRefresh(access, refresh string, accessDuration, refreshDuration time.Duration) {
 	at := time.Now()
-	md.access = access
-	md.refresh = refresh
-	md.accessDeadline = at.Add(accessDuration)
-	md.refreshDeadline = at.Add(refreshDuration)
+	md.Access = access
+	md.Refresh = refresh
+	md.AccessDeadline = at.Add(accessDuration)
+	md.RefreshDeadline = at.Add(refreshDuration)
 }
 func (p *Provider) getMetadata(bucket *bolt.Bucket, key []byte) (md *_Metadata, e error) {
 	b := bucket.Get(key)
@@ -80,15 +73,14 @@ func (p *Provider) getMetadata(bucket *bolt.Bucket, key []byte) (md *_Metadata, 
 	md = &tmp
 	return
 }
+
 func (p *Provider) putMetadata(bucket *bolt.Bucket, key []byte, md *_Metadata) (e error) {
-	buf := getBuffer()
-	e = gob.NewEncoder(buf).Encode(md)
+	var buf bytes.Buffer
+	e = gob.NewEncoder(&buf).Encode(md)
 	if e != nil {
-		putBuffer(buf)
 		return
 	}
 	e = bucket.Put(key, buf.Bytes())
-	putBuffer(buf)
 	if e != nil {
 		return
 	}
@@ -114,14 +106,12 @@ func (p *Provider) deleteIDS(bucket *bolt.Bucket, id []byte, token string) (e er
 		} else {
 			copy(strs[i:], strs[i+1:])
 			strs = strs[:len(strs)-1]
-			buf := getBuffer()
-			e = gob.NewEncoder(buf).Encode(strs)
+			var buf bytes.Buffer
+			e = gob.NewEncoder(&buf).Encode(strs)
 			if e != nil {
-				putBuffer(buf)
 				break
 			}
 			e = bucket.Put(id, buf.Bytes())
-			putBuffer(buf)
 			if e != nil {
 				break
 			}
@@ -142,15 +132,12 @@ func (p *Provider) appendIDS(bucket *bolt.Bucket, id []byte, token string) (e er
 	}
 	strs = append(strs, token)
 
-	buf := getBuffer()
-	e = gob.NewEncoder(buf).Encode(strs)
+	var buf bytes.Buffer
+	e = gob.NewEncoder(&buf).Encode(strs)
 	if e != nil {
-		putBuffer(buf)
 		return
 	}
-
 	e = bucket.Put(id, buf.Bytes())
-	putBuffer(buf)
 	if e != nil {
 		return
 	}
@@ -251,10 +238,10 @@ func (p *Provider) decrement(store *bolt.Bucket) (e error) {
 }
 func (p *Provider) increment(store *bolt.Bucket) (e error) {
 	val := store.Get(keyCount)
-	if val == nil {
-		return
+	var num uint64
+	if val != nil {
+		num = toUint64(val)
 	}
-	num := toUint64(val)
 	num++
 	e = store.Put(keyCount, toBytes(num))
 	return
