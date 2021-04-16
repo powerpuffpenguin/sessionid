@@ -93,7 +93,7 @@ func (m *Manager) Create(ctx context.Context,
 	if e != nil {
 		return
 	}
-	session = newSession(m, eid, access, provider, coder)
+	session = newSession(eid, access, provider, coder)
 	return
 }
 func (m *Manager) create(id string) (access, refresh string, e error) {
@@ -122,12 +122,8 @@ func (m *Manager) createToken(id string) (token string, e error) {
 }
 
 // Destroy a session by id
-func (m *Manager) Destroy(ctx context.Context, id interface{}) error {
-	b, e := m.opts.coder.Encode(id)
-	if e != nil {
-		return e
-	}
-	return m.opts.provider.Destroy(ctx, encode(b))
+func (m *Manager) Destroy(ctx context.Context, id string) error {
+	return m.opts.provider.Destroy(ctx, encode([]byte(id)))
 }
 
 // Destroy a session by token
@@ -145,7 +141,7 @@ func (m *Manager) Get(token string) (s *Session, e error) {
 	if e != nil {
 		return
 	}
-	s = newSession(m, id, token, m.opts.provider, m.opts.coder)
+	s = newSession(id, token, m.opts.provider, m.opts.coder)
 	return
 }
 

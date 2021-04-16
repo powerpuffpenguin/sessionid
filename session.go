@@ -31,7 +31,7 @@ func (s *Session) Token() string {
 	return s.token
 }
 
-func newSession(m *Manager, id, token string, provider Provider, coder Coder) *Session {
+func newSession(id, token string, provider Provider, coder Coder) *Session {
 	return &Session{
 		id:       id,
 		token:    token,
