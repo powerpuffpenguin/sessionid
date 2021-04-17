@@ -838,9 +838,9 @@ func (p *Provider) deleteBucket(bucket *bolt.Bucket) (e error) {
 	cursor := bucket.Cursor()
 	for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
 		if v == nil {
-			e = bucket.Delete(k)
-		} else {
 			e = bucket.DeleteBucket(k)
+		} else {
+			e = bucket.Delete(k)
 		}
 		if e != nil {
 			break

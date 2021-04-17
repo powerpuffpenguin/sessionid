@@ -25,11 +25,12 @@ func (ts *testProvider) testLRU() {
 	p, e := New(
 		WithFilename(`test.db`),
 		WithMaxSize(3),
+		WithClear(0),
 	)
 	assert.Nil(t, e)
 	defer p.Close()
 	assert.Nil(t, p.ticker)
-	assert.Nil(t,p.Clear())
+	assert.Nil(t, p.Clear())
 
 	method := cryptoer.SigningMethodHMD5
 	key := []byte(`cerberus is an idea`)
@@ -68,7 +69,7 @@ func (ts *testProvider) testClear() {
 	assert.Nil(t, e)
 	defer p.Close()
 	assert.NotNil(t, p.ticker)
-	p.doClear()
+	assert.Nil(t, p.Clear())
 	method := cryptoer.SigningMethodHMD5
 	key := []byte(`cerberus is an idea`)
 	access, refresh, e := sessionid.CreateToken(method, key, "1-web")
@@ -113,7 +114,7 @@ func (ts *testProvider) testNormal() {
 	assert.Nil(t, e)
 	defer p.Close()
 	assert.Nil(t, p.ticker)
-	p.doClear()
+	assert.Nil(t, p.Clear())
 
 	method := cryptoer.SigningMethodHMD5
 	key := []byte(`cerberus is an idea`)
