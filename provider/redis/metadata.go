@@ -1,23 +1,8 @@
 package redis
 
 import (
-	"errors"
 	"time"
 )
-
-const (
-	metadataKey   = `__private_provider_redis`
-	preparePrefix = `prepare.`
-	readyPrefix   = `ready.`
-)
-
-func checkKey(key string) (e error) {
-	if key == metadataKey {
-		e = errors.New(`key is reserved : ` + key)
-		return
-	}
-	return
-}
 
 type _Metadata struct {
 	Access          string
@@ -40,4 +25,11 @@ func (md *_Metadata) IsExpired() bool {
 }
 func (md *_Metadata) IsDeleted() bool {
 	return !md.RefreshDeadline.After(time.Now())
+}
+func (md *_Metadata) DoRefresh(access, refresh string, accessDuration, refreshDuration time.Duration) {
+	at := time.Now()
+	md.Access = access
+	md.Refresh = refresh
+	md.AccessDeadline = at.Add(accessDuration)
+	md.RefreshDeadline = at.Add(refreshDuration)
 }

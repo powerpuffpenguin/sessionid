@@ -4,11 +4,17 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/powerpuffpenguin/sessionid"
 )
 
 var defaultOptions = options{
 	access:  time.Hour,
 	refresh: time.Hour * 24,
+	coder:   sessionid.GOBCoder{},
+	batch:   128,
+
+	keyPrefix:   `sessionid.provider.redis.`,
+	metadataKey: `__private_provider_redis`,
 }
 
 type options struct {
@@ -16,6 +22,11 @@ type options struct {
 	client  *redis.Client
 	access  time.Duration
 	refresh time.Duration
+	coder   sessionid.Coder
+
+	batch       int
+	keyPrefix   string
+	metadataKey string
 }
 type Option interface {
 	apply(*options)
@@ -64,5 +75,26 @@ func WithClient(client *redis.Client) Option {
 func WithURL(url string) Option {
 	return newFuncOption(func(po *options) {
 		po.url = url
+	})
+}
+
+// WithCoder set metadata coder
+func WithCoder(coder sessionid.Coder) Option {
+	return newFuncOption(func(o *options) {
+		o.coder = coder
+	})
+}
+
+// WithCheckBatch set batch delete.
+func WithCheckBatch(batch int) Option {
+	return newFuncOption(func(po *options) {
+		po.batch = batch
+	})
+}
+
+// WithKeyPrefix set redis key prefix.
+func WithKeyPrefix(keyPrefix string) Option {
+	return newFuncOption(func(po *options) {
+		po.keyPrefix = keyPrefix
 	})
 }

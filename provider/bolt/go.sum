@@ -10,6 +10,8 @@ github.com/powerpuffpenguin/sessionid v1.0.0 h1:X8aca4hRFYCrsT5ZlUxgtwJSeIKamXMd
 github.com/powerpuffpenguin/sessionid v1.0.0/go.mod h1:e0Q1hZUwAOZnpDPh5N1/oi7pd0tEEEk7OFN4gUZWdeM=
 github.com/powerpuffpenguin/sessionid v1.0.1 h1:r0jlrY6JbaK2+CEb1evENMLbszwyfy9oeMZiZ5jJ514=
 github.com/powerpuffpenguin/sessionid v1.0.1/go.mod h1:e0Q1hZUwAOZnpDPh5N1/oi7pd0tEEEk7OFN4gUZWdeM=
+github.com/powerpuffpenguin/sessionid v1.0.2 h1:p8Rx1IzzGUgNDFONN9KsJF7VZEDoyETgjdLACL9EX0I=
+github.com/powerpuffpenguin/sessionid v1.0.2/go.mod h1:e0Q1hZUwAOZnpDPh5N1/oi7pd0tEEEk7OFN4gUZWdeM=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5CcY=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
