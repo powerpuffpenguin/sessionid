@@ -8,7 +8,7 @@ var defaultOptions = options{
 	method:   cryptoer.SigningMethodHMD5,
 	key:      []byte(`github.com/powerpuffpenguin/sessionid`),
 	provider: NewProvider(),
-	coder:    JSONCoder{},
+	coder:    GOBCoder{},
 }
 
 type options struct {
