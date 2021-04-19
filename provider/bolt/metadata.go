@@ -4,18 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
-	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/powerpuffpenguin/sessionid"
 )
-
-var poolbuffer = sync.Pool{
-	New: func() interface{} {
-		return &bytes.Buffer{}
-	},
-}
 
 func toBytes(v uint64) []byte {
 	b := make([]byte, 8)
