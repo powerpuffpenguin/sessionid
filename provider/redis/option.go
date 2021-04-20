@@ -8,6 +8,7 @@ import (
 )
 
 var defaultOptions = options{
+	url:     `redis://localhost:6379/0`,
 	access:  time.Hour,
 	refresh: time.Hour * 24,
 	coder:   sessionid.GOBCoder{},

@@ -138,7 +138,7 @@ func (p *Provider) Create(ctx context.Context,
 		return
 	}
 
-	fields := make([]string, 0, (len(pair)+1)*2)
+	fields := make([]interface{}, 0, (len(pair)+1)*2)
 	fields = append(fields, p.opts.metadataKey, string(b))
 	for _, field := range pair {
 		e = p.checkKey(field.Key)
@@ -150,8 +150,10 @@ func (p *Provider) Create(ctx context.Context,
 
 	key := p.keyName(access)
 	tx := p.opts.client.TxPipeline()
-	tx.HSet(ctx, key, fields)
+	defer tx.Close()
+	tx.HSet(ctx, key, fields...)
 	tx.ExpireAt(ctx, key, md.RefreshDeadline)
+	tx.Expire(ctx, key, p.opts.refresh)
 	_, e = tx.Exec(ctx)
 	if e != nil {
 		e = p.toError(e)
@@ -207,6 +209,10 @@ func (p *Provider) DestroyByToken(ctx context.Context, token string) (e error) {
 func (p *Provider) getMetadata(ctx context.Context, key string, md *_Metadata) (val string, e error) {
 	val, e = p.opts.client.HGet(ctx, key, p.opts.metadataKey).Result()
 	if e != nil {
+		if e.Error() == `redis: nil` {
+			e = sessionid.ErrTokenNotExists
+			return
+		}
 		e = p.toError(e)
 		return
 	}
@@ -253,13 +259,13 @@ func (p *Provider) Put(ctx context.Context, token string, pair []sessionid.PairB
 		return
 	}
 
-	fields := make([]string, (len(pair)+1)*2)
+	fields := make([]string, 0, (len(pair)+1)*2)
 	for _, field := range pair {
 		e = p.checkKey(field.Key)
 		if e != nil {
 			return
 		}
-		fields = append(fields, string(field.Value))
+		fields = append(fields, field.Key, string(field.Value))
 	}
 
 	var md _Metadata
@@ -276,7 +282,12 @@ func (p *Provider) Put(ctx context.Context, token string, pair []sessionid.PairB
 		return
 	}
 	fields = append(fields, p.opts.metadataKey, mdStr)
-	e = p.opts.client.HSet(ctx, key, fields).Err()
+
+	tx := p.opts.client.TxPipeline()
+	defer tx.Close()
+	tx.HSet(ctx, key, fields)
+	tx.ExpireAt(ctx, key, md.RefreshDeadline)
+	_, e = tx.Exec(ctx)
 	if e != nil {
 		e = p.toError(e)
 		return
@@ -387,8 +398,8 @@ func (p *Provider) checkID(token ...string) (e error) {
 }
 
 // Refresh a new access token
-func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newRefresh string) (err error) {
-	e := p.checkID(access, refresh, newAccess, newRefresh)
+func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newRefresh string) (e error) {
+	e = p.checkID(access, refresh, newAccess, newRefresh)
 	if e != nil {
 		return
 	}
@@ -401,10 +412,9 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 		p.pushDelete(key)
 		return
 	} else if md.Refresh != refresh {
-		err = sessionid.ErrRefreshTokenNotMatched
+		e = sessionid.ErrRefreshTokenNotMatched
 		return
 	}
-
 	md.DoRefresh(newAccess, newRefresh, p.opts.access, p.opts.refresh)
 	b, e := p.opts.coder.Encode(&md)
 	if e != nil {
@@ -413,6 +423,7 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 
 	newkey := p.keyName(newAccess)
 	tx := p.opts.client.TxPipeline()
+	defer tx.Close()
 	tx.HSet(ctx, key, p.opts.metadataKey, string(b))
 	tx.ExpireAt(ctx, key, md.RefreshDeadline)
 	tx.Rename(ctx, key, newkey)
@@ -425,7 +436,7 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 }
 
 // Close provider
-func (p *Provider) Close() (e error) {
+func (p *Provider) Close() error {
 	if atomic.LoadUint32(&p.done) == 0 {
 		p.m.Lock()
 		defer p.m.Unlock()
@@ -439,5 +450,5 @@ func (p *Provider) Close() (e error) {
 			return nil
 		}
 	}
-	return p.opts.client.Close()
+	return sessionid.ErrProviderClosed
 }
