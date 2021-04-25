@@ -166,12 +166,15 @@ func (p *MemoryProvider) clear(ch <-chan time.Time) {
 			return
 		case <-ch:
 			p.m.Lock()
-			p.doClear()
+			p.unsafeClear()
 			p.m.Unlock()
 		}
 	}
 }
-func (p *MemoryProvider) doClear() {
+func (p *MemoryProvider) unsafeClear() {
+	if p.done != 0 {
+		return
+	}
 	var (
 		ele *list.Element
 		t   *tokenValue
@@ -231,7 +234,10 @@ func (p *MemoryProvider) check(batch int) {
 			}
 		}
 		// do task
-		if p.doCheck(m) {
+		p.m.Lock()
+		closed = p.unsafeCheck(m)
+		p.m.Unlock()
+		if closed {
 			break
 		}
 		// clear task
@@ -240,9 +246,7 @@ func (p *MemoryProvider) check(batch int) {
 		}
 	}
 }
-func (p *MemoryProvider) doCheck(m map[string]bool) (closed bool) {
-	p.m.Lock()
-	defer p.m.Unlock()
+func (p *MemoryProvider) unsafeCheck(m map[string]bool) (closed bool) {
 	if p.done != 0 {
 		closed = true
 		return
