@@ -18,7 +18,7 @@ func TestManager(t *testing.T) {
 	id := `1-app`
 	session, refresh, e := m.Create(ctx, id)
 	assert.Nil(t, e)
-	_, e = m.Get(session.Token())
+	_, e = m.Get(ctx, session.Token())
 	assert.Nil(t, e)
 	_, _, e = m.Refresh(ctx, session.Token(), refresh)
 	assert.Nil(t, e)

@@ -19,7 +19,7 @@ type Manager interface {
 	// Destroy a session by token
 	DestroyByToken(ctx context.Context, token string) error
 	// Get session from token
-	Get(token string) (s *Session, e error)
+	Get(ctx context.Context, token string) (s *Session, e error)
 	// Refresh a new access token
 	Refresh(ctx context.Context, access, refresh string) (newAccess, newRefresh string, e error)
 }
@@ -91,7 +91,7 @@ func (m *LocalManager) DestroyByToken(ctx context.Context, token string) error {
 }
 
 // Get session from token
-func (m *LocalManager) Get(token string) (s *Session, e error) {
+func (m *LocalManager) Get(ctx context.Context, token string) (s *Session, e error) {
 	id, _, signature, e := Split(token)
 	if e != nil {
 		return
