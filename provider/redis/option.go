@@ -99,3 +99,10 @@ func WithKeyPrefix(keyPrefix string) Option {
 		po.keyPrefix = keyPrefix
 	})
 }
+
+// WithMetadataKey metadata key
+func WithMetadataKey(metadataKey string) Option {
+	return newFuncOption(func(po *options) {
+		po.metadataKey = metadataKey
+	})
+}
