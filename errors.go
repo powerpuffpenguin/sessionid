@@ -18,5 +18,5 @@ var (
 )
 
 func IsTokenExpired(e error) bool {
-	return errors.Is(e, ErrTokenInvalid)
+	return errors.Is(e, ErrTokenExpired)
 }
