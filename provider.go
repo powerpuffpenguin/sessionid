@@ -523,7 +523,7 @@ func (p *MemoryProvider) Keys(ctx context.Context, token string) (keys []string,
 			} else if t.IsExpired() {
 				e = ErrTokenExpired
 			} else if len(t.data) != 0 {
-				keys = make([]string, len(t.data))
+				keys = make([]string, 0, len(t.data))
 				for k := range t.data {
 					keys = append(keys, k)
 				}
