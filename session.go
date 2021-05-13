@@ -30,7 +30,19 @@ func (s *Session) ID() string {
 func (s *Session) Token() string {
 	return s.token
 }
-
+func NewSession(token string, provider Provider, coder Coder) (session *Session, e error) {
+	id, _, _, e := Split(token)
+	if e != nil {
+		return
+	}
+	session = &Session{
+		id:       id,
+		token:    token,
+		provider: provider,
+		coder:    coder,
+	}
+	return
+}
 func newSession(id, token string, provider Provider, coder Coder) *Session {
 	return &Session{
 		id:       id,
