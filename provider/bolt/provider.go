@@ -786,7 +786,7 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 			if e != nil {
 				return
 			}
-			e = p.appendIDS(bIDS, []byte(id), access)
+			e = p.appendIDS(bIDS, []byte(id), newAccess)
 			if e != nil {
 				return
 			}
@@ -801,7 +801,6 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 		}
 	} else {
 		err = sessionid.ErrProviderClosed
-		return
 	}
 	p.m.Unlock()
 	return
