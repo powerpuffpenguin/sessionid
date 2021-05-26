@@ -204,3 +204,18 @@ func TestProvider(t *testing.T) {
 	}
 	ts.test()
 }
+func TestProviderRefresh(t *testing.T) {
+	p, _ := New(
+		WithFilename(`test.db`),
+	)
+	access := `MQ.0twx-L3yEeu50vQ5CT5esA.sPT5717CDjzlXdDxSPY1Dw`
+	refresh := `MQ.1txL4b3yEeu50vQ5CT5esA.OJBdvFPBKCnDf1GQxpe60Q`
+	newAccess := `MQ.2uFEkr3yEeu50vQ5CT5esA.gAGe6hNaKeg9w0HhAmgE1Q`
+	newRefresh := `MQ.3uFE273yEeu50vQ5CT5esA.q3XcQ1YqeesN_ZHSq1zLEQ`
+	ctx := context.Background()
+	p.Create(ctx, access, refresh, nil)
+	p.Refresh(ctx, access, refresh, newAccess, newRefresh)
+
+	assert.Equal(t, p.Check(ctx, access), sessionid.ErrTokenNotExists)
+	assert.Nil(t, p.Check(ctx, newAccess))
+}

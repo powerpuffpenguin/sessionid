@@ -774,6 +774,7 @@ func (p *Provider) Refresh(ctx context.Context, access, refresh, newAccess, newR
 			}
 			// new
 			md.DoRefresh(newAccess, newRefresh, p.opts.access, p.opts.refresh)
+			key = []byte(newAccess)
 			md.LRU, e = p.putLRU(bLRU, key)
 			if e != nil {
 				return
